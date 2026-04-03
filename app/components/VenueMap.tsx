@@ -37,6 +37,12 @@ export default function VenueMap({
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || "";
   const mapRef = useRef<google.maps.Map | null>(null);
 
+  // Frozen on first render — never changes.
+  // @react-google-maps/api calls panTo() whenever the `center` prop object changes,
+  // so keeping it stable ensures the library NEVER overrides our imperative panning.
+  // All positioning after mount is handled by the useEffect hooks below.
+  const initialCenter = useRef(center ?? userLocation ?? defaultCenter);
+
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: apiKey,
@@ -53,22 +59,14 @@ export default function VenueMap({
     [selectedVenueId, validVenues]
   );
 
-  const mapCenter = useMemo(() => {
-    // Selected venue takes priority — prevents the search/user-location center prop
-    // from overriding the imperative panTo when a marker is clicked.
-    if (selectedVenue) return { lat: selectedVenue.lat, lng: selectedVenue.lng };
-    if (center) return center;
-    if (userLocation) return userLocation;
-    if (validVenues.length > 0) return { lat: validVenues[0].lat, lng: validVenues[0].lng };
-    return defaultCenter;
-  }, [center, userLocation, selectedVenue, validVenues]);
-
+  // Pan to selected venue imperatively — never rely on the center prop for this.
   useEffect(() => {
     if (!mapRef.current || !selectedVenue) return;
     mapRef.current.panTo({ lat: selectedVenue.lat, lng: selectedVenue.lng });
     mapRef.current.setZoom(14);
   }, [selectedVenue]);
 
+  // Fit all venues into view when no venue is selected.
   useEffect(() => {
     if (!mapRef.current || validVenues.length === 0 || selectedVenue) return;
     const bounds = new google.maps.LatLngBounds();
@@ -96,7 +94,7 @@ export default function VenueMap({
     <GoogleMap
       mapContainerStyle={containerStyle}
       mapContainerClassName={className}
-      center={mapCenter}
+      center={initialCenter.current}
       zoom={12}
       onLoad={(map) => { mapRef.current = map; }}
       options={{
@@ -110,7 +108,6 @@ export default function VenueMap({
         ],
       }}
     >
-      {/* Venue markers */}
       {validVenues.map((venue) => {
         const isSelected = selectedVenueId === venue.id;
         return (
@@ -132,33 +129,22 @@ export default function VenueMap({
         );
       })}
 
-      {/* User location — blue dot + accuracy ring */}
       {userLocation && (
         <>
-          {/* Accuracy ring */}
           <CircleF
             center={userLocation}
             radius={200}
             options={{
-              fillColor: "#4285F4",
-              fillOpacity: 0.12,
-              strokeColor: "#4285F4",
-              strokeOpacity: 0.3,
-              strokeWeight: 1,
-              zIndex: 1,
+              fillColor: "#4285F4", fillOpacity: 0.12,
+              strokeColor: "#4285F4", strokeOpacity: 0.3, strokeWeight: 1, zIndex: 1,
             }}
           />
-          {/* Blue dot */}
           <CircleF
             center={userLocation}
             radius={40}
             options={{
-              fillColor: "#4285F4",
-              fillOpacity: 1,
-              strokeColor: "#ffffff",
-              strokeOpacity: 1,
-              strokeWeight: 3,
-              zIndex: 1001,
+              fillColor: "#4285F4", fillOpacity: 1,
+              strokeColor: "#ffffff", strokeOpacity: 1, strokeWeight: 3, zIndex: 1001,
             }}
           />
         </>
