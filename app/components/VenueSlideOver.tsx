@@ -73,16 +73,40 @@ function slotToHour(slot: string): number {
   return h + min / 60;
 }
 
-/**
- * Generate start-time slots from 6am to midnight, stepping by durationMinutes.
- * The last slot must allow the session to finish by midnight.
- */
-function generateSlots(durationMinutes: number): string[] {
-  const slots: string[] = [];
-  const start = 6 * 60;        // 6:00am in minutes
-  const end = 24 * 60;         // midnight in minutes
+// Confirmed open/close hours per venue (partial lowercase name match, 24h).
+// Sources: each venue's website. Used to filter which slots to display.
+const VENUE_OPEN_HOURS: { match: string; open: number; close: number }[] = [
+  { match: "mitcham badminton",          open: 9,  close: 24 },
+  { match: "melbourne badminton centre", open: 8,  close: 23 },
+  { match: "kings park badminton",       open: 8,  close: 24 },
+  { match: "alpha badminton",            open: 9,  close: 23 },
+  { match: "hunter badminton",           open: 9,  close: 19 },
+  { match: "adelaide badminton centre",  open: 11, close: 24 },
+  { match: "badminton hobart",           open: 9,  close: 21 },
+  { match: "darwin badminton",           open: 18, close: 22 },
+  { match: "southside badminton",        open: 18, close: 22 },
+];
+const DEFAULT_OPEN_H = 9;
+const DEFAULT_CLOSE_H = 22;
 
-  for (let m = start; m + durationMinutes <= end; m += durationMinutes) {
+function getVenueOpenHours(venueName: string): { open: number; close: number } {
+  const name = venueName.toLowerCase();
+  const match = VENUE_OPEN_HOURS.find((h) => name.includes(h.match));
+  return match ? { open: match.open, close: match.close } : { open: DEFAULT_OPEN_H, close: DEFAULT_CLOSE_H };
+}
+
+/**
+ * Generate start-time slots within a venue's opening hours, stepping by durationMinutes.
+ * Minimum start is 8am — no venue offers casual court hire before 8am.
+ */
+function generateSlots(durationMinutes: number, venueName: string): string[] {
+  const { open, close } = getVenueOpenHours(venueName);
+  const startH = Math.max(open, 8); // never earlier than 8am
+  const slots: string[] = [];
+  const startMin = startH * 60;
+  const endMin = close * 60;
+
+  for (let m = startMin; m + durationMinutes <= endMin; m += durationMinutes) {
     const h = Math.floor(m / 60);
     const min = m % 60;
     const h12 = h % 12 === 0 ? 12 : h % 12;
@@ -95,8 +119,9 @@ function generateSlots(durationMinutes: number): string[] {
 function isPeakSlot(slot: string, dayOfWeek: number): boolean {
   const h = slotToHour(slot);
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  // Peak: weekend mornings 9–12, all evenings 5–9pm (no pre-8am peak since we don't show those)
   if (isWeekend) return (h >= 9 && h < 12) || (h >= 17 && h < 21);
-  return (h >= 7 && h < 9) || (h >= 18 && h < 21);
+  return h >= 17 && h < 21;
 }
 
 const DURATION_OPTIONS = [
@@ -190,9 +215,9 @@ export default function VenueSlideOver({ venue, open, onClose }: Props) {
 
   const dayOfWeek = useMemo(() => getDayOfWeek(selectedDate), [selectedDate]);
 
-  // Re-generate slots whenever duration changes
-  const allSlots = useMemo(() => generateSlots(duration), [duration]);
-  const morningSlots = useMemo(() => allSlots.filter(s => { const h = slotToHour(s); return h >= 6 && h < 12; }), [allSlots]);
+  // Re-generate slots whenever duration or venue changes
+  const allSlots = useMemo(() => generateSlots(duration, venue?.name ?? ""), [duration, venue?.name]);
+  const morningSlots = useMemo(() => allSlots.filter(s => { const h = slotToHour(s); return h >= 8 && h < 12; }), [allSlots]);
   const afternoonSlots = useMemo(() => allSlots.filter(s => { const h = slotToHour(s); return h >= 12 && h < 18; }), [allSlots]);
   const eveningSlots = useMemo(() => allSlots.filter(s => { const h = slotToHour(s); return h >= 18; }), [allSlots]);
 
@@ -381,7 +406,7 @@ export default function VenueSlideOver({ venue, open, onClose }: Props) {
                       </div>
 
                       <div className="space-y-5">
-                        <TimeSlotGrid title="Morning · 6am – 12pm" slots={morningSlots} selected={selectedTime} dayOfWeek={dayOfWeek} onSelect={setSelectedTime} />
+                        <TimeSlotGrid title="Morning · 8am – 12pm" slots={morningSlots} selected={selectedTime} dayOfWeek={dayOfWeek} onSelect={setSelectedTime} />
                         <TimeSlotGrid title="Afternoon · 12pm – 6pm" slots={afternoonSlots} selected={selectedTime} dayOfWeek={dayOfWeek} onSelect={setSelectedTime} />
                         <TimeSlotGrid title="Evening · 6pm – midnight" slots={eveningSlots} selected={selectedTime} dayOfWeek={dayOfWeek} onSelect={setSelectedTime} />
                       </div>
