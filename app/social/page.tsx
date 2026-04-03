@@ -111,6 +111,9 @@ export default function SocialPage() {
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventStateFilter, setEventStateFilter] = useState("");
   const [nearMeEvents, setNearMeEvents] = useState(false);
+  const [eventsMobileView, setEventsMobileView] = useState<"list" | "map">("list");
+  const [activeEventVenueId, setActiveEventVenueId] = useState<number | null>(null);
+  const eventsListRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
@@ -236,41 +239,61 @@ export default function SocialPage() {
     return result;
   }, [venues, search, stateFilter, activeOnly, nearMe, userLocation, distances, sessionCounts]);
 
+  // Fast lookup: venue name → venue row (for event coords + distance)
+  const venueByName = useMemo(() => {
+    const m: Record<string, Venue> = {};
+    venues.forEach((v) => { m[v.name] = v; });
+    return m;
+  }, [venues]);
+
   const eventStates = useMemo(
     () => [...new Set(venueEvents.map((e) => e.venue_state))].sort(),
     [venueEvents]
   );
 
-  const userState = useMemo(() => {
-    if (!userLocation) return null;
-    let closest = null as string | null;
-    let minDist = Infinity;
-    for (const [state, coords] of Object.entries(STATE_CAPITALS)) {
-      const d = haversineKm(userLocation.lat, userLocation.lng, coords.lat, coords.lng);
-      if (d < minDist) { minDist = d; closest = state; }
-    }
-    return closest;
-  }, [userLocation]);
-
   const filteredEvents = useMemo(() => {
-    const filtered = venueEvents.filter((e) => {
-      if (nearMeEvents && userState && e.venue_state !== userState) return false;
+    let result = venueEvents.filter((e) => {
       if (eventStateFilter && e.venue_state !== eventStateFilter) return false;
+      if (nearMeEvents && userLocation) {
+        const v = venueByName[e.venue_name];
+        if (!v?.lat || !v?.lng) return false; // no coords → exclude when Near me active
+        return haversineKm(userLocation.lat, userLocation.lng, v.lat, v.lng) <= 50;
+      }
       return true;
     });
 
     if (userLocation) {
-      return [...filtered].sort((a, b) => {
-        const capA = STATE_CAPITALS[a.venue_state];
-        const capB = STATE_CAPITALS[b.venue_state];
-        const dA = capA ? haversineKm(userLocation.lat, userLocation.lng, capA.lat, capA.lng) : 9999;
-        const dB = capB ? haversineKm(userLocation.lat, userLocation.lng, capB.lat, capB.lng) : 9999;
+      result = [...result].sort((a, b) => {
+        const vA = venueByName[a.venue_name];
+        const vB = venueByName[b.venue_name];
+        const dA = vA?.lat && vA?.lng ? haversineKm(userLocation.lat, userLocation.lng, vA.lat, vA.lng) : 9999;
+        const dB = vB?.lat && vB?.lng ? haversineKm(userLocation.lat, userLocation.lng, vB.lat, vB.lng) : 9999;
         return dA !== dB ? dA - dB : a.venue_name.localeCompare(b.venue_name);
       });
     }
 
-    return filtered;
-  }, [venueEvents, eventStateFilter, nearMeEvents, userState, userLocation]);
+    return result;
+  }, [venueEvents, venueByName, eventStateFilter, nearMeEvents, userLocation]);
+
+  // Events filtered further by map marker selection
+  const displayedEvents = useMemo(() => {
+    if (!activeEventVenueId) return filteredEvents;
+    return filteredEvents.filter((e) => venueByName[e.venue_name]?.id === activeEventVenueId);
+  }, [filteredEvents, activeEventVenueId, venueByName]);
+
+  // Pins for the Group Events map — one per unique venue that has events
+  const eventVenuePins = useMemo(() => {
+    const seen = new Set<number>();
+    const pins: { id: number; name: string; lat: number; lng: number; sessionCount: number }[] = [];
+    filteredEvents.forEach((e) => {
+      const v = venueByName[e.venue_name];
+      if (!v?.lat || !v?.lng || seen.has(v.id)) return;
+      seen.add(v.id);
+      const count = filteredEvents.filter((ev) => ev.venue_name === e.venue_name).length;
+      pins.push({ id: v.id, name: e.venue_name, lat: v.lat, lng: v.lng, sessionCount: count });
+    });
+    return pins;
+  }, [filteredEvents, venueByName]);
 
   const mapPins = useMemo(
     () => filteredVenues
@@ -466,20 +489,34 @@ export default function SocialPage() {
         {/* Filter bar — Group Events */}
         {activeTab === "events" && (
         <div className="flex items-center gap-2 overflow-x-auto border-t bg-muted/30 px-4 py-2 sm:px-6 [scrollbar-width:none]">
-          {locStatus === "granted" && userLocation && (
-            <>
-              <FilterPill
-                label="Near me"
-                active={nearMeEvents}
-                onClick={() => { setNearMeEvents((v) => !v); setEventStateFilter(""); }}
-                icon={<Navigation className="h-3 w-3" />}
-              />
-              <div className="h-4 w-px shrink-0 bg-border" />
-            </>
+          {locStatus === "denied" ? (
+            <button
+              onClick={requestLocation}
+              className="flex shrink-0 items-center gap-1 rounded-full border border-dashed px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
+            >
+              <Navigation className="h-3 w-3" /> Enable location
+            </button>
+          ) : (
+            <FilterPill
+              label={locStatus === "requesting" ? "Locating…" : "Near me"}
+              active={nearMeEvents}
+              onClick={() => {
+                if (locStatus === "granted") {
+                  setNearMeEvents((v) => !v);
+                  setEventStateFilter("");
+                  setActiveEventVenueId(null);
+                } else {
+                  requestLocation();
+                  setNearMeEvents(true);
+                }
+              }}
+              icon={<Navigation className="h-3 w-3" />}
+            />
           )}
-          <FilterPill label="All states" active={!eventStateFilter && !nearMeEvents} onClick={() => { setEventStateFilter(""); setNearMeEvents(false); }} />
+          <div className="h-4 w-px shrink-0 bg-border" />
+          <FilterPill label="All" active={!eventStateFilter && !nearMeEvents} onClick={() => { setEventStateFilter(""); setNearMeEvents(false); setActiveEventVenueId(null); }} />
           {eventStates.map((s) => (
-            <FilterPill key={s} label={s} active={eventStateFilter === s} onClick={() => { setEventStateFilter(eventStateFilter === s ? "" : s); setNearMeEvents(false); }} />
+            <FilterPill key={s} label={s} active={eventStateFilter === s} onClick={() => { setEventStateFilter(eventStateFilter === s ? "" : s); setNearMeEvents(false); setActiveEventVenueId(null); }} />
           ))}
         </div>
         )}
@@ -487,72 +524,116 @@ export default function SocialPage() {
 
       {/* ── GROUP EVENTS TAB ── */}
       {activeTab === "events" && (
-        <div className="flex-1 overflow-y-auto">
-          {eventsLoading ? (
-            <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-3">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="bg-background p-6">
-                  <Skeleton className="mb-3 h-4 w-40" />
-                  <Skeleton className="mb-2 h-3 w-56" />
-                  <Skeleton className="h-3 w-28" />
-                </div>
-              ))}
-            </div>
-          ) : filteredEvents.length === 0 ? (
-            <div className="py-24 text-center">
-              <p className="text-4xl">🏸</p>
-              <p className="mt-3 text-sm text-muted-foreground">No events found</p>
-              <button onClick={() => setEventStateFilter("")} className="mt-2 text-sm text-primary hover:underline">
-                Show all states
-              </button>
-            </div>
-          ) : (
-            <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-3">
-              {filteredEvents.map((event) => (
-                <div key={event.id} className="flex flex-col bg-background p-6">
-                  <div className="flex-1">
-                    <p className="font-semibold leading-snug">{event.title}</p>
-                    <div className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
-                      <MapPin className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{event.venue_name}</span>
-                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">{event.venue_state}</span>
-                    </div>
+        <>
+        {/* Mobile list/map toggle */}
+        <div className="flex-shrink-0 border-b bg-background px-4 py-2 lg:hidden">
+          <div className="flex w-fit rounded-lg border p-0.5">
+            <button
+              onClick={() => setEventsMobileView("list")}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${eventsMobileView === "list" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <List className="h-3.5 w-3.5" /> List
+            </button>
+            <button
+              onClick={() => setEventsMobileView("map")}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${eventsMobileView === "map" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Map className="h-3.5 w-3.5" /> Map
+            </button>
+          </div>
+        </div>
 
-                    <div className="mt-4 space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span>{event.day_of_week}</span>
+        <div className="flex flex-1 flex-col overflow-hidden lg:flex-row">
+          {/* Event list */}
+          <div ref={eventsListRef} className={`w-full flex-shrink-0 overflow-y-auto lg:w-[440px] xl:w-[480px] lg:border-r ${eventsMobileView === "map" ? "hidden lg:block" : ""}`}>
+            {activeEventVenueId && (
+              <div className="flex items-center gap-2 border-b bg-primary/5 px-4 py-2">
+                <MapPin className="h-3.5 w-3.5 text-primary" />
+                <span className="flex-1 truncate text-xs font-medium text-primary">
+                  {venueByName[displayedEvents[0]?.venue_name]?.name ?? "Selected venue"}
+                </span>
+                <button onClick={() => setActiveEventVenueId(null)} className="text-[11px] text-muted-foreground hover:text-foreground">
+                  Show all
+                </button>
+              </div>
+            )}
+            {eventsLoading ? (
+              <div className="space-y-3 p-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="rounded-xl border p-4">
+                    <Skeleton className="mb-2 h-4 w-40" />
+                    <Skeleton className="mb-2 h-3 w-56" />
+                    <Skeleton className="h-3 w-28" />
+                  </div>
+                ))}
+              </div>
+            ) : displayedEvents.length === 0 ? (
+              <div className="py-24 text-center">
+                <p className="text-4xl">🏸</p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  {nearMeEvents ? "No events within 50 km" : "No events found"}
+                </p>
+                <button onClick={() => { setEventStateFilter(""); setNearMeEvents(false); setActiveEventVenueId(null); }} className="mt-2 text-sm text-primary hover:underline">
+                  Show all events
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3 p-4">
+                {displayedEvents.map((event) => {
+                  const v = venueByName[event.venue_name];
+                  const dist = v && userLocation ? haversineKm(userLocation.lat, userLocation.lng, v.lat, v.lng) : null;
+                  return (
+                    <div key={event.id} className="flex flex-col rounded-xl border bg-card p-4 transition hover:shadow-sm">
+                      <p className="font-semibold leading-snug">{event.title}</p>
+                      <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{event.venue_name}</span>
+                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">{event.venue_state}</span>
+                        {dist != null && (
+                          <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">{dist.toFixed(1)} km</span>
+                        )}
                       </div>
-                      {event.time_slot && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Clock className="h-4 w-4 shrink-0" />
-                          <span>{event.time_slot}</span>
-                        </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" />{event.day_of_week}</span>
+                        {event.time_slot && <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{event.time_slot}</span>}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <Badge variant="secondary" className="text-[10px]">{event.skill_level}</Badge>
+                        {event.price && <Badge variant="outline" className="text-[10px] text-primary">{event.price}</Badge>}
+                      </div>
+                      {(event.booking_url || event.source_url) && (
+                        <a
+                          href={event.booking_url || event.source_url || ""}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-3 flex items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition hover:bg-accent"
+                        >
+                          {event.booking_url ? "Book a spot" : "View details"}
+                          <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                        </a>
                       )}
                     </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Badge variant="secondary">{event.skill_level}</Badge>
-                      {event.price && <Badge variant="outline" className="text-primary">{event.price}</Badge>}
-                    </div>
-                  </div>
-
-                  {(event.booking_url || event.source_url) && (
-                    <a
-                      href={event.booking_url || event.source_url || ""}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-5 flex items-center justify-between rounded-lg border px-4 py-2.5 text-sm font-medium transition hover:bg-accent"
-                    >
-                      {event.booking_url ? "Book a spot" : "View details"}
-                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Events map */}
+          <div className={`min-h-[300px] flex-1 lg:min-h-0 ${eventsMobileView === "list" ? "hidden lg:block" : ""}`}>
+            <SocialMap
+              venues={eventVenuePins}
+              selectedVenueId={activeEventVenueId}
+              onMarkerClick={(id) => {
+                setActiveEventVenueId((prev) => prev === id ? null : id);
+                setEventsMobileView("list");
+              }}
+              userLocation={userLocation}
+              className="h-full"
+            />
+          </div>
         </div>
+        </>
       )}
 
       {/* ── FIND PARTNERS TAB ── */}
