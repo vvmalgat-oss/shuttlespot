@@ -240,14 +240,14 @@ INSERT INTO venue_events (venue_name, venue_suburb, venue_state, title, descript
 
 -- ─── SOUTH AUSTRALIA ──────────────────────────────────────────────────────────
 
-('Adelaide Badminton Centre', 'Brooklyn Park', 'SA',
+('Adelaide Badminton Centre', 'Torrensville', 'SA',
  'All You Can Play (Weekday Daytime)',
  'Play all you can between 11am–4pm. All courts must be shared — walk-ins welcome, no advance registration required.',
  'Tuesday, Wednesday, Thursday, Friday', '11:00 AM – 4:00 PM', 'weekly', '$14/session', 'All levels',
  'https://adelaidebadmintoncentre.yepbooking.com.au/',
  'https://adelaidebadmintoncentre.com/'),
 
-('Adelaide Badminton Centre', 'Brooklyn Park', 'SA',
+('Adelaide Badminton Centre', 'Torrensville', 'SA',
  'Friday Social Night',
  'Weekly Friday social badminton night at this purpose-built 9-court facility. Contact (08) 8443 4035 or admin@adelaidebadmintoncentre.com for details.',
  'Friday', '7:30 PM onwards', 'weekly', NULL, 'All levels',
