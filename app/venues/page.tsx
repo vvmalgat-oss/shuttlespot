@@ -11,7 +11,15 @@ import VenueSlideOver from "../components/VenueSlideOver";
 import { useUserLocation } from "../hooks/useUserLocation";
 
 type Venue = { id: number; name: string; suburb: string; address: string; city: string; state: string; courts: number; price: string; booking_url: string; lat: number; lng: number };
-type SortKey = "name" | "price-asc" | "price-desc" | "courts";
+type SortKey = "distance" | "name" | "price-asc" | "price-desc" | "courts";
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 function parsePrice(p: string | null): number {
   if (!p) return 0;
@@ -38,6 +46,7 @@ export default function VenuesPage() {
   const [activeVenueId, setActiveVenueId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("name");
+  const [autoSortedToDistance, setAutoSortedToDistance] = useState(false);
   const [stateFilter, setStateFilter] = useState("");
   const [minCourts, setMinCourts] = useState(0);
   const [slideOverVenue, setSlideOverVenue] = useState<Venue | null>(null);
@@ -52,6 +61,14 @@ export default function VenuesPage() {
     }
     load();
   }, []);
+
+  // Auto-switch to nearest sort once location is available (only once)
+  useEffect(() => {
+    if (userLocation && !autoSortedToDistance) {
+      setSort("distance");
+      setAutoSortedToDistance(true);
+    }
+  }, [userLocation, autoSortedToDistance]);
 
   const states = useMemo(
     () => [...new Set(venues.map((v) => v.state).filter(Boolean))].sort() as string[],
@@ -74,6 +91,11 @@ export default function VenuesPage() {
     });
 
     result = [...result].sort((a, b) => {
+      if (sort === "distance" && userLocation) {
+        const dA = a.lat && a.lng ? haversineKm(userLocation.lat, userLocation.lng, a.lat, a.lng) : 9999;
+        const dB = b.lat && b.lng ? haversineKm(userLocation.lat, userLocation.lng, b.lat, b.lng) : 9999;
+        return dA - dB;
+      }
       if (sort === "price-asc") return parsePrice(a.price) - parsePrice(b.price);
       if (sort === "price-desc") return parsePrice(b.price) - parsePrice(a.price);
       if (sort === "courts") return (b.courts || 0) - (a.courts || 0);
@@ -81,7 +103,7 @@ export default function VenuesPage() {
     });
 
     return result;
-  }, [venues, search, sort, stateFilter, minCourts]);
+  }, [venues, search, sort, stateFilter, minCourts, userLocation]);
 
   const hasActiveFilters = !!stateFilter || minCourts > 0;
 
@@ -105,8 +127,9 @@ export default function VenuesPage() {
           {/* Sort */}
           <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Sort</span>
           <div className="flex gap-1">
+            {userLocation && <FilterPill label="Nearest" active={sort === "distance"} onClick={() => setSort("distance")} />}
             {([ ["name", "Name"], ["price-asc", "Price ↑"], ["price-desc", "Price ↓"], ["courts", "Most Courts"] ] as [SortKey, string][]).map(([key, label]) => (
-              <FilterPill key={key} label={label} active={sort === key} onClick={() => setSort(key)} />
+              <FilterPill key={key} label={label} active={sort === key} onClick={() => setSort(key as SortKey)} />
             ))}
           </div>
 
