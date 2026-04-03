@@ -79,6 +79,7 @@ export default function SocialPage() {
   const [venueEvents, setVenueEvents] = useState<VenueEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventStateFilter, setEventStateFilter] = useState("");
+  const [nearMeEvents, setNearMeEvents] = useState(false);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
@@ -209,13 +210,25 @@ export default function SocialPage() {
     [venueEvents]
   );
 
+  const userState = useMemo(() => {
+    if (!userLocation) return null;
+    let closest = null as string | null;
+    let minDist = Infinity;
+    for (const [state, coords] of Object.entries(STATE_CAPITALS)) {
+      const d = haversineKm(userLocation.lat, userLocation.lng, coords.lat, coords.lng);
+      if (d < minDist) { minDist = d; closest = state; }
+    }
+    return closest;
+  }, [userLocation]);
+
   const filteredEvents = useMemo(() => {
-    const filtered = venueEvents.filter((e) =>
-      !eventStateFilter || e.venue_state === eventStateFilter
-    );
+    const filtered = venueEvents.filter((e) => {
+      if (nearMeEvents && userState && e.venue_state !== userState) return false;
+      if (eventStateFilter && e.venue_state !== eventStateFilter) return false;
+      return true;
+    });
 
     if (userLocation) {
-      // Sort by distance from user to each event's state capital
       return [...filtered].sort((a, b) => {
         const capA = STATE_CAPITALS[a.venue_state];
         const capB = STATE_CAPITALS[b.venue_state];
@@ -226,7 +239,7 @@ export default function SocialPage() {
     }
 
     return filtered;
-  }, [venueEvents, eventStateFilter, userLocation]);
+  }, [venueEvents, eventStateFilter, nearMeEvents, userState, userLocation]);
 
   const mapPins = useMemo(
     () => filteredVenues
@@ -235,18 +248,22 @@ export default function SocialPage() {
     [filteredVenues, sessionCounts]
   );
 
-  // After React paints the expanded accordion, scroll the list container to that venue
+  // After React paints + browser lays out (rAF), scroll the list container to that venue.
+  // rAF is needed on mobile: the list container has "hidden" removed in the same render,
+  // so getBoundingClientRect() returns 0 until the browser has painted.
   useEffect(() => {
     if (pendingScrollId === null) return;
-    const venueEl = venueRefs.current[pendingScrollId];
-    const container = listContainerRef.current;
-    if (venueEl && container) {
-      const containerTop = container.getBoundingClientRect().top;
-      const venueTop = venueEl.getBoundingClientRect().top;
-      const scrollTarget = container.scrollTop + venueTop - containerTop - 12;
-      container.scrollTo({ top: Math.max(0, scrollTarget), behavior: "smooth" });
-    }
+    const id = pendingScrollId;
     setPendingScrollId(null);
+    requestAnimationFrame(() => {
+      const venueEl = venueRefs.current[id];
+      const container = listContainerRef.current;
+      if (venueEl && container) {
+        const containerTop = container.getBoundingClientRect().top;
+        const venueTop = venueEl.getBoundingClientRect().top;
+        container.scrollTo({ top: Math.max(0, container.scrollTop + venueTop - containerTop - 12), behavior: "smooth" });
+      }
+    });
   }, [pendingScrollId]);
 
   // Map pin click → expand in list + scroll
@@ -418,9 +435,20 @@ export default function SocialPage() {
         {/* Filter bar — Group Events */}
         {activeTab === "events" && (
         <div className="flex items-center gap-2 overflow-x-auto border-t bg-muted/30 px-4 py-2 sm:px-6 [scrollbar-width:none]">
-          <FilterPill label="All states" active={!eventStateFilter} onClick={() => setEventStateFilter("")} />
+          {locStatus === "granted" && userLocation && (
+            <>
+              <FilterPill
+                label="Near me"
+                active={nearMeEvents}
+                onClick={() => { setNearMeEvents((v) => !v); setEventStateFilter(""); }}
+                icon={<Navigation className="h-3 w-3" />}
+              />
+              <div className="h-4 w-px shrink-0 bg-border" />
+            </>
+          )}
+          <FilterPill label="All states" active={!eventStateFilter && !nearMeEvents} onClick={() => { setEventStateFilter(""); setNearMeEvents(false); }} />
           {eventStates.map((s) => (
-            <FilterPill key={s} label={s} active={eventStateFilter === s} onClick={() => setEventStateFilter(eventStateFilter === s ? "" : s)} />
+            <FilterPill key={s} label={s} active={eventStateFilter === s} onClick={() => { setEventStateFilter(eventStateFilter === s ? "" : s); setNearMeEvents(false); }} />
           ))}
         </div>
         )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "../../supabase";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,8 @@ function SearchContent() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeVenueId, setActiveVenueId] = useState<number | null>(null);
+  const [pendingScrollId, setPendingScrollId] = useState<number | null>(null);
+  const listContainerRef = useRef<HTMLDivElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sort, setSort] = useState<SortKey>("distance");
   const [maxDistance, setMaxDistance] = useState(15);
@@ -77,6 +79,23 @@ function SearchContent() {
     setMaxDistance(15);
     setMinCourts(0);
   }, [location]);
+
+  // Scroll list to active venue after render (triggered by marker click).
+  // rAF defers until after the browser paints — required when switching from map view on mobile.
+  useEffect(() => {
+    if (pendingScrollId === null) return;
+    const id = pendingScrollId;
+    setPendingScrollId(null);
+    requestAnimationFrame(() => {
+      const container = listContainerRef.current;
+      const card = document.getElementById(`venue-${id}`);
+      if (container && card) {
+        const containerTop = container.getBoundingClientRect().top;
+        const cardTop = card.getBoundingClientRect().top;
+        container.scrollTo({ top: Math.max(0, container.scrollTop + cardTop - containerTop - 16), behavior: "smooth" });
+      }
+    });
+  }, [pendingScrollId]);
 
   const { results, distances } = useMemo(() => {
     const distances: Record<number, number> = {};
@@ -206,7 +225,7 @@ function SearchContent() {
       </div>
 
       <div className="flex flex-1 flex-col overflow-hidden lg:flex-row">
-        <div className={`venue-scroll w-full flex-shrink-0 overflow-y-auto p-4 lg:w-[440px] xl:w-[480px] lg:border-r ${mobileView === "map" ? "hidden lg:block" : ""}`}>
+        <div ref={listContainerRef} className={`venue-scroll w-full flex-shrink-0 overflow-y-auto p-4 lg:w-[440px] xl:w-[480px] lg:border-r ${mobileView === "map" ? "hidden lg:block" : ""}`}>
           <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Results near {location}</p>
           {loading ? (
             <div className="space-y-3">
@@ -242,7 +261,7 @@ function SearchContent() {
           )}
         </div>
         <div className={`min-h-[300px] flex-1 lg:min-h-0 ${mobileView === "list" ? "hidden lg:block" : ""}`}>
-          <VenueMap venues={results} selectedVenueId={activeVenueId} onMarkerClick={(id) => { setActiveVenueId(id); setMobileView("list"); }} center={center} userLocation={userLocation} fullHeight className="h-full" />
+          <VenueMap venues={results} selectedVenueId={activeVenueId} onMarkerClick={(id) => { setActiveVenueId(id); setMobileView("list"); setPendingScrollId(id); }} center={center} userLocation={userLocation} fullHeight className="h-full" />
         </div>
       </div>
 
