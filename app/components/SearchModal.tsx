@@ -6,7 +6,7 @@ import { useJsApiLoader } from "@react-google-maps/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, MapPin } from "lucide-react";
+import { Search, MapPin, Navigation } from "lucide-react";
 
 // Must be defined outside the component to avoid "LoadScript reloaded" warnings.
 // Must match the libraries array in VenueMap.tsx.
@@ -17,9 +17,9 @@ type Prediction = {
   place_id: string;
 };
 
-type Props = { open: boolean; onClose: () => void };
+type Props = { open: boolean; onClose: () => void; userLocation?: { lat: number; lng: number } | null };
 
-export default function SearchModal({ open, onClose }: Props) {
+export default function SearchModal({ open, onClose, userLocation }: Props) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || "";
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
@@ -29,6 +29,7 @@ export default function SearchModal({ open, onClose }: Props) {
 
   const [query, setQuery] = useState("");
   const [predictions, setPredictions] = useState<Prediction[]>([]);
+  const [currentLocationLabel, setCurrentLocationLabel] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
   const router = useRouter();
@@ -40,6 +41,19 @@ export default function SearchModal({ open, onClose }: Props) {
       setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [open]);
+
+  // Reverse geocode user's coordinates into a readable suburb label
+  useEffect(() => {
+    if (!open || !isLoaded || !userLocation) return;
+    const geocoder = new google.maps.Geocoder();
+    geocoder.geocode({ location: userLocation }, (results, status) => {
+      if (status !== google.maps.GeocoderStatus.OK || !results || results.length === 0) return;
+      const result = results[0];
+      const locality = result.address_components.find((c) => c.types.includes("locality"))?.long_name;
+      const state = result.address_components.find((c) => c.types.includes("administrative_area_level_1"))?.short_name;
+      if (locality) setCurrentLocationLabel(state ? `${locality}, ${state}` : locality);
+    });
+  }, [open, isLoaded, userLocation]);
 
   useEffect(() => {
     if (isLoaded && !autocompleteService.current) {
@@ -88,6 +102,17 @@ export default function SearchModal({ open, onClose }: Props) {
     );
   };
 
+  const selectCurrentLocation = () => {
+    if (!userLocation || !currentLocationLabel) return;
+    const params = new URLSearchParams({
+      location: currentLocationLabel,
+      lat: String(userLocation.lat),
+      lng: String(userLocation.lng),
+    });
+    onClose();
+    router.push(`/search?${params.toString()}`);
+  };
+
   const handleFreeSearch = () => {
     if (predictions.length > 0) {
       selectLocation(predictions[0]);
@@ -120,6 +145,22 @@ export default function SearchModal({ open, onClose }: Props) {
               className="pl-9 h-11"
             />
           </div>
+
+          {/* Current location suggestion — shown when no query typed yet */}
+          {!query && currentLocationLabel && (
+            <div className="mt-2 rounded-lg border bg-popover overflow-hidden">
+              <button
+                onClick={selectCurrentLocation}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm transition hover:bg-accent"
+              >
+                <Navigation className="h-3.5 w-3.5 text-primary" />
+                <div>
+                  <span className="font-medium">{currentLocationLabel}</span>
+                  <span className="ml-1.5 text-xs text-muted-foreground">Your location</span>
+                </div>
+              </button>
+            </div>
+          )}
 
           {predictions.length > 0 && (
             <div className="mt-2 rounded-lg border bg-popover overflow-hidden" style={{ animation: "slideDown 0.15s ease-out" }}>

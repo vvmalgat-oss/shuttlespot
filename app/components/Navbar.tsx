@@ -18,6 +18,7 @@ import AuthModal from "./AuthModal";
 import ShuttleSpotLogo from "./ShuttlecockLogo";
 import { supabase } from "@/supabase";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { useUserLocation } from "../hooks/useUserLocation";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -25,6 +26,7 @@ export default function Navbar() {
   const [authOpen, setAuthOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const { location: userLocation } = useUserLocation();
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
@@ -152,7 +154,7 @@ export default function Navbar() {
         )}
       </header>
 
-      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} userLocation={userLocation} />
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </>
   );

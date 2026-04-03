@@ -319,7 +319,7 @@ export default function Home() {
         </div>
       </section>
 
-      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} userLocation={userLoc} />
     </div>
   );
 }
