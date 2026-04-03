@@ -74,6 +74,33 @@ const STATE_CAPITALS: Record<string, { lat: number; lng: number }> = {
   NT:  { lat: -12.4634, lng: 130.8456 },
 };
 
+/**
+ * Resolve coordinates for a venue_event row.
+ * Many events are clubs (e.g. "Melbourne Smashers") that don't exist in
+ * the venues table. Fall through three tiers so we always get a position:
+ *   1. Exact venue name match in venues table
+ *   2. Any venue in the same suburb + state (club meeting at a shared hall)
+ *   3. State capital (rough but correct for state-level "near me" filtering)
+ */
+function getEventCoords(
+  event: { venue_name: string; venue_suburb: string | null; venue_state: string },
+  venueByName: Record<string, { lat: number; lng: number }>,
+  venues: { name: string; suburb: string; state: string; lat: number; lng: number }[]
+): { lat: number; lng: number } | null {
+  const exact = venueByName[event.venue_name];
+  if (exact?.lat && exact?.lng) return { lat: exact.lat, lng: exact.lng };
+
+  const bySuburb = venues.find(
+    (v) =>
+      v.state === event.venue_state &&
+      v.suburb?.toLowerCase() === event.venue_suburb?.toLowerCase() &&
+      v.lat && v.lng
+  );
+  if (bySuburb) return { lat: bySuburb.lat, lng: bySuburb.lng };
+
+  return STATE_CAPITALS[event.venue_state] ?? null;
+}
+
 function getNextDays(count: number): Date[] {
   return Array.from({ length: count }, (_, i) => {
     const d = new Date();
@@ -251,49 +278,83 @@ export default function SocialPage() {
     [venueEvents]
   );
 
+  // Detect user's state from actual GPS coords
+  const userState = useMemo(() => {
+    if (!userLocation) return null;
+    let closest = null as string | null;
+    let minDist = Infinity;
+    for (const [state, coords] of Object.entries(STATE_CAPITALS)) {
+      const d = haversineKm(userLocation.lat, userLocation.lng, coords.lat, coords.lng);
+      if (d < minDist) { minDist = d; closest = state; }
+    }
+    return closest;
+  }, [userLocation]);
+
   const filteredEvents = useMemo(() => {
     let result = venueEvents.filter((e) => {
       if (eventStateFilter && e.venue_state !== eventStateFilter) return false;
-      if (nearMeEvents && userLocation) {
-        const v = venueByName[e.venue_name];
-        if (!v?.lat || !v?.lng) return false; // no coords → exclude when Near me active
-        return haversineKm(userLocation.lat, userLocation.lng, v.lat, v.lng) <= 50;
-      }
+      // Near me: filter to user's detected state (reliable even when exact venue
+      // coords aren't in the venues table — clubs, associations, etc.)
+      if (nearMeEvents && userState && e.venue_state !== userState) return false;
       return true;
     });
 
     if (userLocation) {
       result = [...result].sort((a, b) => {
-        const vA = venueByName[a.venue_name];
-        const vB = venueByName[b.venue_name];
-        const dA = vA?.lat && vA?.lng ? haversineKm(userLocation.lat, userLocation.lng, vA.lat, vA.lng) : 9999;
-        const dB = vB?.lat && vB?.lng ? haversineKm(userLocation.lat, userLocation.lng, vB.lat, vB.lng) : 9999;
+        const cA = getEventCoords(a, venueByName, venues);
+        const cB = getEventCoords(b, venueByName, venues);
+        const dA = cA ? haversineKm(userLocation.lat, userLocation.lng, cA.lat, cA.lng) : 9999;
+        const dB = cB ? haversineKm(userLocation.lat, userLocation.lng, cB.lat, cB.lng) : 9999;
         return dA !== dB ? dA - dB : a.venue_name.localeCompare(b.venue_name);
       });
     }
 
     return result;
-  }, [venueEvents, venueByName, eventStateFilter, nearMeEvents, userLocation]);
+  }, [venueEvents, venueByName, venues, eventStateFilter, nearMeEvents, userState, userLocation]);
 
   // Events filtered further by map marker selection
   const displayedEvents = useMemo(() => {
     if (!activeEventVenueId) return filteredEvents;
-    return filteredEvents.filter((e) => venueByName[e.venue_name]?.id === activeEventVenueId);
-  }, [filteredEvents, activeEventVenueId, venueByName]);
+    // Match by resolved venue id OR by venue_name if pin was placed via suburb fallback
+    return filteredEvents.filter((e) => {
+      const v = venues.find((vv) => vv.id === activeEventVenueId);
+      if (!v) return false;
+      // Direct name match or same suburb+state (for clubs at the same facility)
+      return e.venue_name === v.name ||
+        (e.venue_suburb?.toLowerCase() === v.suburb?.toLowerCase() && e.venue_state === v.state);
+    });
+  }, [filteredEvents, activeEventVenueId, venues]);
 
-  // Pins for the Group Events map — one per unique venue that has events
+  // Pins for the Group Events map — one per resolved location
   const eventVenuePins = useMemo(() => {
-    const seen = new Set<number>();
+    const seen = new Set<string>(); // key: "lat,lng"
     const pins: { id: number; name: string; lat: number; lng: number; sessionCount: number }[] = [];
+    let syntheticId = -1;
     filteredEvents.forEach((e) => {
-      const v = venueByName[e.venue_name];
-      if (!v?.lat || !v?.lng || seen.has(v.id)) return;
-      seen.add(v.id);
-      const count = filteredEvents.filter((ev) => ev.venue_name === e.venue_name).length;
-      pins.push({ id: v.id, name: e.venue_name, lat: v.lat, lng: v.lng, sessionCount: count });
+      const coords = getEventCoords(e, venueByName, venues);
+      if (!coords) return;
+      const key = `${coords.lat.toFixed(4)},${coords.lng.toFixed(4)}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      // Use real venue id if available, otherwise a synthetic negative id
+      const realVenue = venues.find(
+        (v) => v.name === e.venue_name ||
+          (v.suburb?.toLowerCase() === e.venue_suburb?.toLowerCase() && v.state === e.venue_state)
+      );
+      const count = filteredEvents.filter((ev) => {
+        const c = getEventCoords(ev, venueByName, venues);
+        return c && Math.abs(c.lat - coords.lat) < 0.001 && Math.abs(c.lng - coords.lng) < 0.001;
+      }).length;
+      pins.push({
+        id: realVenue?.id ?? syntheticId--,
+        name: e.venue_name,
+        lat: coords.lat,
+        lng: coords.lng,
+        sessionCount: count,
+      });
     });
     return pins;
-  }, [filteredEvents, venueByName]);
+  }, [filteredEvents, venueByName, venues]);
 
   const mapPins = useMemo(
     () => filteredVenues
@@ -580,8 +641,8 @@ export default function SocialPage() {
             ) : (
               <div className="space-y-3 p-4">
                 {displayedEvents.map((event) => {
-                  const v = venueByName[event.venue_name];
-                  const dist = v && userLocation ? haversineKm(userLocation.lat, userLocation.lng, v.lat, v.lng) : null;
+                  const coords = getEventCoords(event, venueByName, venues);
+                  const dist = coords && userLocation ? haversineKm(userLocation.lat, userLocation.lng, coords.lat, coords.lng) : null;
                   return (
                     <div key={event.id} className="flex flex-col rounded-xl border bg-card p-4 transition hover:shadow-sm">
                       <p className="font-semibold leading-snug">{event.title}</p>
