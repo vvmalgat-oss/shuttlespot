@@ -17,11 +17,42 @@ type Venue = { id: number; name: string; suburb: string; city: string; state: st
 type PlayRequest = { id: number; venue_id: number; venue_name: string; date: string; time_slot: string; player_name: string; player_email: string; skill_level: string; spots_available: number; message: string; status: string; created_at: string };
 type VenueEvent = { id: number; venue_name: string; venue_suburb: string; venue_state: string; title: string; description: string; day_of_week: string; time_slot: string; frequency: string; price: string | null; skill_level: string; booking_url: string | null; source_url: string | null };
 
-const TIME_SLOTS = [
-  "6:00 AM - 8:00 AM", "8:00 AM - 10:00 AM", "10:00 AM - 12:00 PM",
-  "12:00 PM - 2:00 PM", "2:00 PM - 4:00 PM", "4:00 PM - 6:00 PM",
-  "6:00 PM - 8:00 PM", "8:00 PM - 10:00 PM",
+// All possible 2-hour slots with their start/end in 24h for filtering
+const ALL_TIME_SLOTS: { label: string; start: number; end: number }[] = [
+  { label: "6:00 AM - 8:00 AM",   start: 6,  end: 8  },
+  { label: "8:00 AM - 10:00 AM",  start: 8,  end: 10 },
+  { label: "10:00 AM - 12:00 PM", start: 10, end: 12 },
+  { label: "12:00 PM - 2:00 PM",  start: 12, end: 14 },
+  { label: "2:00 PM - 4:00 PM",   start: 14, end: 16 },
+  { label: "4:00 PM - 6:00 PM",   start: 16, end: 18 },
+  { label: "6:00 PM - 8:00 PM",   start: 18, end: 20 },
+  { label: "8:00 PM - 10:00 PM",  start: 20, end: 22 },
 ];
+
+// Confirmed opening hours per venue (partial lowercase name match).
+// open/close in 24h. Source: each venue's website.
+const VENUE_HOURS: { match: string; open: number; close: number }[] = [
+  { match: "mitcham badminton",          open: 9,  close: 24 }, // 9am–midnight (mitchambadminton.com.au)
+  { match: "melbourne badminton centre", open: 8,  close: 23 }, // 8am–11pm (melbournebadminton.com)
+  { match: "kings park badminton",       open: 6,  close: 24 }, // 6am–midnight (sydneysportsclub.com.au)
+  { match: "alpha badminton",            open: 9,  close: 23 }, // 9am–11pm (alphabadminton.com.au)
+  { match: "hunter badminton",           open: 9,  close: 19 }, // session-based (hunterbadminton.com.au)
+  { match: "adelaide badminton centre",  open: 11, close: 24 }, // 11am–midnight (adelaidebadmintoncentre.com)
+  { match: "badminton hobart",           open: 9,  close: 21 }, // 9am, sessions to 7pm (badmintonhobart.com)
+  { match: "darwin badminton",           open: 19, close: 22 }, // club evenings Mon–Thu 7:30–10pm
+  { match: "southside badminton",        open: 19, close: 22 }, // evening sessions only
+];
+
+const DEFAULT_OPEN = 9;  // safe default: no venue opens before 9am
+const DEFAULT_CLOSE = 22; // safe default: 10pm
+
+function getVenueSlots(venueName: string): string[] {
+  const name = venueName.toLowerCase();
+  const hours = VENUE_HOURS.find((h) => name.includes(h.match));
+  const open = hours?.open ?? DEFAULT_OPEN;
+  const close = hours?.close ?? DEFAULT_CLOSE;
+  return ALL_TIME_SLOTS.filter((s) => s.start >= open && s.end <= close).map((s) => s.label);
+}
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 6371;
@@ -633,7 +664,7 @@ export default function SocialPage() {
                                   )}
                                 </div>
                                 <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-                                  {TIME_SLOTS.map((slot) => {
+                                  {getVenueSlots(venue.name).map((slot) => {
                                     const session = getSession(venue.id, date, slot);
                                     const hasPlayer = !!session;
                                     const isOwn = hasPlayer && user?.email === session.player_email;
