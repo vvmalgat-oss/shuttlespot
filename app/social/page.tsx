@@ -17,9 +17,9 @@ type Venue = { id: number; name: string; suburb: string; city: string; state: st
 type PlayRequest = { id: number; venue_id: number; venue_name: string; date: string; time_slot: string; player_name: string; player_email: string; skill_level: string; spots_available: number; message: string; status: string; created_at: string };
 type VenueEvent = { id: number; venue_name: string; venue_suburb: string; venue_state: string; title: string; description: string; day_of_week: string; time_slot: string; frequency: string; price: string | null; skill_level: string; booking_url: string | null; source_url: string | null };
 
-// All possible 2-hour slots with their start/end in 24h for filtering
+// 2-hour slots starting at 8am (earliest any Australian badminton venue opens for casual hire).
+// start/end in 24h for per-venue filtering.
 const ALL_TIME_SLOTS: { label: string; start: number; end: number }[] = [
-  { label: "6:00 AM - 8:00 AM",   start: 6,  end: 8  },
   { label: "8:00 AM - 10:00 AM",  start: 8,  end: 10 },
   { label: "10:00 AM - 12:00 PM", start: 10, end: 12 },
   { label: "12:00 PM - 2:00 PM",  start: 12, end: 14 },
@@ -32,19 +32,19 @@ const ALL_TIME_SLOTS: { label: string; start: number; end: number }[] = [
 // Confirmed opening hours per venue (partial lowercase name match).
 // open/close in 24h. Source: each venue's website.
 const VENUE_HOURS: { match: string; open: number; close: number }[] = [
-  { match: "mitcham badminton",          open: 9,  close: 24 }, // 9am–midnight (mitchambadminton.com.au)
-  { match: "melbourne badminton centre", open: 8,  close: 23 }, // 8am–11pm (melbournebadminton.com)
-  { match: "kings park badminton",       open: 6,  close: 24 }, // 6am–midnight (sydneysportsclub.com.au)
-  { match: "alpha badminton",            open: 9,  close: 23 }, // 9am–11pm (alphabadminton.com.au)
-  { match: "hunter badminton",           open: 9,  close: 19 }, // session-based (hunterbadminton.com.au)
+  { match: "mitcham badminton",          open: 9,  close: 24 }, // 9am–midnight  (mitchambadminton.com.au)
+  { match: "melbourne badminton centre", open: 8,  close: 23 }, // 8am–11pm      (melbournebadminton.com)
+  { match: "kings park badminton",       open: 8,  close: 24 }, // 8am–midnight  (sydneysportsclub.com.au)
+  { match: "alpha badminton",            open: 9,  close: 23 }, // 9am–11pm      (alphabadminton.com.au)
+  { match: "hunter badminton",           open: 9,  close: 19 }, // 9am–7pm       (hunterbadminton.com.au)
   { match: "adelaide badminton centre",  open: 11, close: 24 }, // 11am–midnight (adelaidebadmintoncentre.com)
-  { match: "badminton hobart",           open: 9,  close: 21 }, // 9am, sessions to 7pm (badmintonhobart.com)
-  { match: "darwin badminton",           open: 19, close: 22 }, // club evenings Mon–Thu 7:30–10pm
-  { match: "southside badminton",        open: 19, close: 22 }, // evening sessions only
+  { match: "badminton hobart",           open: 9,  close: 21 }, // 9am–9pm       (badmintonhobart.com)
+  { match: "darwin badminton",           open: 18, close: 22 }, // 6pm–10pm      (darwinbadmintonclub.net.au)
+  { match: "southside badminton",        open: 18, close: 22 }, // evening sessions only
 ];
 
-const DEFAULT_OPEN = 9;  // safe default: no venue opens before 9am
-const DEFAULT_CLOSE = 22; // safe default: 10pm
+const DEFAULT_OPEN = 9;  // 9am: safe default — no casual venue opens earlier
+const DEFAULT_CLOSE = 22; // 10pm: safe default
 
 function getVenueSlots(venueName: string): string[] {
   const name = venueName.toLowerCase();
