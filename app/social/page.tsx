@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, MapPin, Calendar, Clock, ChevronDown, ChevronUp, Trash2, Search, Map, List, Radio, Navigation } from "lucide-react";
+import { Users, MapPin, Calendar, Clock, ChevronDown, ChevronUp, Trash2, Search, Map, List, Radio, Navigation, ExternalLink, PartyPopper } from "lucide-react";
 import AuthModal from "../components/AuthModal";
 import SocialMap from "../components/SocialMap";
 import { useUserLocation } from "../hooks/useUserLocation";
@@ -15,6 +15,7 @@ import type { User } from "@supabase/supabase-js";
 
 type Venue = { id: number; name: string; suburb: string; city: string; state: string; lat: number; lng: number };
 type PlayRequest = { id: number; venue_id: number; venue_name: string; date: string; time_slot: string; player_name: string; player_email: string; skill_level: string; spots_available: number; message: string; status: string; created_at: string };
+type VenueEvent = { id: number; venue_name: string; venue_suburb: string; venue_state: string; title: string; description: string; day_of_week: string; time_slot: string; frequency: string; price: string | null; skill_level: string; booking_url: string | null; source_url: string | null };
 
 const TIME_SLOTS = [
   "6:00 AM - 8:00 AM", "8:00 AM - 10:00 AM", "10:00 AM - 12:00 PM",
@@ -60,8 +61,14 @@ function FilterPill({ label, active, onClick, icon }: { label: string; active: b
 }
 
 export default function SocialPage() {
+  const [activeTab, setActiveTab] = useState<"partners" | "events">("partners");
   const [venues, setVenues] = useState<Venue[]>([]);
   const [requests, setRequests] = useState<PlayRequest[]>([]);
+  const [venueEvents, setVenueEvents] = useState<VenueEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [eventStateFilter, setEventStateFilter] = useState("");
+  const [eventDayFilter, setEventDayFilter] = useState("");
+  const [eventSkillFilter, setEventSkillFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
@@ -97,13 +104,16 @@ export default function SocialPage() {
   // Initial data load
   useEffect(() => {
     async function load() {
-      const [v, r] = await Promise.all([
+      const [v, r, e] = await Promise.all([
         supabase.from("venues").select("id, name, suburb, city, state, lat, lng").order("name"),
         supabase.from("play_requests").select("*").eq("status", "open").gte("date", new Date().toISOString().split("T")[0]).order("created_at", { ascending: false }),
+        supabase.from("venue_events").select("*").eq("is_active", true).order("venue_state").order("venue_name"),
       ]);
       if (v.data) setVenues(v.data as Venue[]);
       if (r.data) setRequests(r.data as PlayRequest[]);
+      if (e.data) setVenueEvents(e.data as VenueEvent[]);
       setLoading(false);
+      setEventsLoading(false);
     }
     load();
   }, []);
@@ -184,6 +194,20 @@ export default function SocialPage() {
     return result;
   }, [venues, search, stateFilter, activeOnly, nearMe, userLocation, distances, sessionCounts]);
 
+  const filteredEvents = useMemo(() => {
+    return venueEvents.filter((e) => {
+      if (eventStateFilter && e.venue_state !== eventStateFilter) return false;
+      if (eventDayFilter && !e.day_of_week.includes(eventDayFilter)) return false;
+      if (eventSkillFilter && !e.skill_level.toLowerCase().includes(eventSkillFilter.toLowerCase())) return false;
+      return true;
+    });
+  }, [venueEvents, eventStateFilter, eventDayFilter, eventSkillFilter]);
+
+  const eventStates = useMemo(
+    () => [...new Set(venueEvents.map((e) => e.venue_state))].sort(),
+    [venueEvents]
+  );
+
   const mapPins = useMemo(
     () => filteredVenues
       .filter((v) => v.lat && v.lng)
@@ -260,10 +284,30 @@ export default function SocialPage() {
     <div className="flex h-[calc(100vh-56px)] flex-col">
       {/* Header */}
       <div className="flex-shrink-0 border-b bg-background">
+        {/* Tab switcher */}
+        <div className="flex items-center gap-6 border-b px-4 sm:px-6">
+          <button
+            onClick={() => setActiveTab("partners")}
+            className={`flex items-center gap-1.5 border-b-2 py-3 text-sm font-medium transition ${activeTab === "partners" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            <Users className="h-4 w-4" /> Find Partners
+          </button>
+          <button
+            onClick={() => setActiveTab("events")}
+            className={`flex items-center gap-1.5 border-b-2 py-3 text-sm font-medium transition ${activeTab === "events" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            <PartyPopper className="h-4 w-4" /> Group Events
+            {venueEvents.length > 0 && (
+              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">{venueEvents.length}</span>
+            )}
+          </button>
+        </div>
+
+        {activeTab === "partners" && (
         <div className="flex items-center gap-4 px-4 py-3 sm:px-6">
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold">Find Playing Partners</h1>
+              <h1 className="text-base font-bold">Find Playing Partners</h1>
               {liveIndicator && (
                 <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
                   <Radio className="h-2.5 w-2.5 animate-pulse" /> Live
@@ -279,8 +323,21 @@ export default function SocialPage() {
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search venues..." className="h-9 pl-9 text-sm" />
           </div>
         </div>
+        )}
 
-        {/* Filter bar */}
+        {activeTab === "events" && (
+        <div className="flex items-center gap-4 px-4 py-3 sm:px-6">
+          <div className="flex-1">
+            <h1 className="text-base font-bold">Group Events at Venues</h1>
+            <p className="text-xs text-muted-foreground">
+              {eventsLoading ? "Loading..." : `${filteredEvents.length} event${filteredEvents.length !== 1 ? "s" : ""} across Australia`}
+            </p>
+          </div>
+        </div>
+        )}
+
+        {/* Filter bar — Partners */}
+        {activeTab === "partners" && (
         <div className="flex items-center gap-3 overflow-x-auto border-t bg-muted/30 px-4 py-2 sm:px-6 [scrollbar-width:none]">
           {/* Near me */}
           {locStatus === "denied" ? (
@@ -334,7 +391,135 @@ export default function SocialPage() {
             </>
           )}
         </div>
+        )}
+
+        {/* Filter bar — Group Events */}
+        {activeTab === "events" && (
+        <div className="flex items-center gap-3 overflow-x-auto border-t bg-muted/30 px-4 py-2 sm:px-6 [scrollbar-width:none]">
+          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">State</span>
+          <div className="flex gap-1">
+            <FilterPill label="All" active={!eventStateFilter} onClick={() => setEventStateFilter("")} />
+            {eventStates.map((s) => (
+              <FilterPill key={s} label={s} active={eventStateFilter === s} onClick={() => setEventStateFilter(eventStateFilter === s ? "" : s)} />
+            ))}
+          </div>
+
+          <div className="h-4 w-px shrink-0 bg-border" />
+
+          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Day</span>
+          <div className="flex gap-1">
+            <FilterPill label="Any" active={!eventDayFilter} onClick={() => setEventDayFilter("")} />
+            {["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"].map((d) => (
+              <FilterPill key={d} label={d.slice(0,3)} active={eventDayFilter === d} onClick={() => setEventDayFilter(eventDayFilter === d ? "" : d)} />
+            ))}
+          </div>
+
+          <div className="h-4 w-px shrink-0 bg-border" />
+
+          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Level</span>
+          <div className="flex gap-1">
+            <FilterPill label="All" active={!eventSkillFilter} onClick={() => setEventSkillFilter("")} />
+            {["Beginner","Intermediate","Advanced"].map((l) => (
+              <FilterPill key={l} label={l} active={eventSkillFilter === l} onClick={() => setEventSkillFilter(eventSkillFilter === l ? "" : l)} />
+            ))}
+          </div>
+        </div>
+        )}
       </div>
+
+      {/* ── GROUP EVENTS TAB ── */}
+      {activeTab === "events" && (
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          {eventsLoading ? (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="rounded-xl border p-4">
+                  <Skeleton className="mb-2 h-4 w-48" />
+                  <Skeleton className="mb-2 h-3 w-64" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+              ))}
+            </div>
+          ) : filteredEvents.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="text-4xl">🏸</p>
+              <p className="mt-3 text-sm text-muted-foreground">No events match your filters</p>
+              <button
+                onClick={() => { setEventStateFilter(""); setEventDayFilter(""); setEventSkillFilter(""); }}
+                className="mt-2 text-sm text-primary hover:underline"
+              >
+                Clear filters
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Group by state */}
+              {(eventStateFilter ? [eventStateFilter] : eventStates).map((state) => {
+                const stateEvents = filteredEvents.filter((e) => e.venue_state === state);
+                if (stateEvents.length === 0) return null;
+                return (
+                  <div key={state} className="mb-8">
+                    <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">{state}</h2>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {stateEvents.map((event) => (
+                        <div key={event.id} className="flex flex-col rounded-xl border bg-card p-4 transition hover:shadow-md">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                              <PartyPopper className="h-4 w-4 text-primary" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold leading-tight">{event.title}</p>
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">{event.venue_name}</p>
+                              <p className="text-[11px] text-muted-foreground">{event.venue_suburb}, {event.venue_state}</p>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 space-y-1.5">
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Calendar className="h-3.5 w-3.5 shrink-0" />
+                              <span>{event.day_of_week} · {event.frequency}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Clock className="h-3.5 w-3.5 shrink-0" />
+                              <span>{event.time_slot}</span>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                            <Badge variant="secondary" className="text-[10px]">{event.skill_level}</Badge>
+                            {event.price && (
+                              <Badge variant="outline" className="text-[10px] text-primary">{event.price}</Badge>
+                            )}
+                          </div>
+
+                          {event.description && (
+                            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground line-clamp-2">{event.description}</p>
+                          )}
+
+                          {(event.booking_url || event.source_url) && (
+                            <a
+                              href={event.booking_url || event.source_url || ""}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary/90"
+                            >
+                              {event.booking_url ? "Book / Join" : "View Details"}
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── FIND PARTNERS TAB ── */}
+      {activeTab === "partners" && <>
 
       {/* Mobile toggle */}
       <div className="flex-shrink-0 border-b bg-background px-4 py-2 lg:hidden">
@@ -531,6 +716,8 @@ export default function SocialPage() {
           />
         </div>
       </div>
+
+      </> /* end partners tab */}
 
       {/* Post modal */}
       <Dialog open={showPostModal} onOpenChange={(v) => { if (!v) { setShowPostModal(false); setPendingSlot(null); } }}>
