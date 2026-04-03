@@ -54,9 +54,11 @@ export default function VenueMap({
   );
 
   const mapCenter = useMemo(() => {
+    // Selected venue takes priority — prevents the search/user-location center prop
+    // from overriding the imperative panTo when a marker is clicked.
+    if (selectedVenue) return { lat: selectedVenue.lat, lng: selectedVenue.lng };
     if (center) return center;
     if (userLocation) return userLocation;
-    if (selectedVenue) return { lat: selectedVenue.lat, lng: selectedVenue.lng };
     if (validVenues.length > 0) return { lat: validVenues[0].lat, lng: validVenues[0].lng };
     return defaultCenter;
   }, [center, userLocation, selectedVenue, validVenues]);
