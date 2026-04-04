@@ -57,7 +57,7 @@ export default function SavedPage() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .then(({ data }) => {
-        if (data) setVenues(data.map((r: { venues: Venue }) => r.venues).filter(Boolean));
+        if (data) setVenues(data.map((r: { venue_id: number; venues: Venue }) => r.venues).filter(Boolean));
         setLoading(false);
       });
   }, [user]);
