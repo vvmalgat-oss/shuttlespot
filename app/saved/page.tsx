@@ -57,7 +57,8 @@ export default function SavedPage() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .then(({ data }) => {
-        if (data) setVenues(data.map((r: { venue_id: number; venues: Venue }) => r.venues).filter(Boolean));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (data) setVenues((data as any[]).map((r) => r.venues).filter(Boolean));
         setLoading(false);
       });
   }, [user]);
