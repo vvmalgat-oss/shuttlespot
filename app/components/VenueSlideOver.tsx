@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { Sheet, SheetContent, SheetClose } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import {
   MapPin, ExternalLink, Navigation, X, CalendarDays,
   Clock, AlertCircle, Flame, CheckCircle2, Info,
 } from "lucide-react";
+import Link from "next/link";
 import VenueMap from "./VenueMap";
 
 type Venue = {
@@ -25,6 +26,9 @@ type Venue = {
   booking_url: string;
   lat: number;
   lng: number;
+  opening_hours?: string | null;
+  open_hour?: number | null;
+  close_hour?: number | null;
 };
 
 type Props = {
@@ -73,34 +77,16 @@ function slotToHour(slot: string): number {
   return h + min / 60;
 }
 
-// Confirmed open/close hours per venue (partial lowercase name match, 24h).
-// Sources: each venue's website. Used to filter which slots to display.
-const VENUE_OPEN_HOURS: { match: string; open: number; close: number }[] = [
-  { match: "mitcham badminton",          open: 9,  close: 24 },
-  { match: "melbourne badminton centre", open: 8,  close: 23 },
-  { match: "kings park badminton",       open: 8,  close: 24 },
-  { match: "alpha badminton",            open: 9,  close: 23 },
-  { match: "hunter badminton",           open: 9,  close: 19 },
-  { match: "adelaide badminton centre",  open: 11, close: 24 },
-  { match: "badminton hobart",           open: 9,  close: 21 },
-  { match: "darwin badminton",           open: 18, close: 22 },
-  { match: "southside badminton",        open: 18, close: 22 },
-];
 const DEFAULT_OPEN_H = 9;
 const DEFAULT_CLOSE_H = 22;
 
-function getVenueOpenHours(venueName: string): { open: number; close: number } {
-  const name = venueName.toLowerCase();
-  const match = VENUE_OPEN_HOURS.find((h) => name.includes(h.match));
-  return match ? { open: match.open, close: match.close } : { open: DEFAULT_OPEN_H, close: DEFAULT_CLOSE_H };
-}
-
 /**
  * Generate start-time slots within a venue's opening hours, stepping by durationMinutes.
- * Minimum start is 8am — no venue offers casual court hire before 8am.
+ * Uses DB open_hour/close_hour when available, falls back to defaults.
  */
-function generateSlots(durationMinutes: number, venueName: string): string[] {
-  const { open, close } = getVenueOpenHours(venueName);
+function generateSlots(durationMinutes: number, venue: { name: string; open_hour?: number | null; close_hour?: number | null }): string[] {
+  const open = venue.open_hour ?? DEFAULT_OPEN_H;
+  const close = venue.close_hour ?? DEFAULT_CLOSE_H;
   const startH = Math.max(open, 8); // never earlier than 8am
   const slots: string[] = [];
   const startMin = startH * 60;
@@ -190,6 +176,7 @@ export default function VenueSlideOver({ venue, open, onClose }: Props) {
 
   const [selectedDate, setSelectedDate] = useState(today);
   const [customDate, setCustomDate] = useState("");
+  const customDateInputRef = useRef<HTMLInputElement>(null);
   const [duration, setDuration] = useState(60);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
@@ -216,7 +203,7 @@ export default function VenueSlideOver({ venue, open, onClose }: Props) {
   const dayOfWeek = useMemo(() => getDayOfWeek(selectedDate), [selectedDate]);
 
   // Re-generate slots whenever duration or venue changes
-  const allSlots = useMemo(() => generateSlots(duration, venue?.name ?? ""), [duration, venue?.name]);
+  const allSlots = useMemo(() => generateSlots(duration, venue ?? { name: "" }), [duration, venue]);
   const morningSlots = useMemo(() => allSlots.filter(s => { const h = slotToHour(s); return h >= 8 && h < 12; }), [allSlots]);
   const afternoonSlots = useMemo(() => allSlots.filter(s => { const h = slotToHour(s); return h >= 12 && h < 18; }), [allSlots]);
   const eveningSlots = useMemo(() => allSlots.filter(s => { const h = slotToHour(s); return h >= 18; }), [allSlots]);
@@ -267,11 +254,20 @@ export default function VenueSlideOver({ venue, open, onClose }: Props) {
                     <span className="truncate">{venue.address}</span>
                   </div>
                 </div>
-                <SheetClose asChild>
-                  <button className="mt-0.5 shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground">
-                    <X className="h-4 w-4" />
-                  </button>
-                </SheetClose>
+                <div className="flex items-center gap-1">
+                  <Link
+                    href={`/venue/${venue.id}`}
+                    onClick={onClose}
+                    className="rounded-md px-2.5 py-1.5 text-[11px] font-medium text-primary transition hover:bg-primary/10"
+                  >
+                    Full details →
+                  </Link>
+                  <SheetClose asChild>
+                    <button className="mt-0.5 shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </SheetClose>
+                </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 {venue.courts ? (
@@ -350,11 +346,15 @@ export default function VenueSlideOver({ venue, open, onClose }: Props) {
                             <span className="text-[11px] text-muted-foreground">{sub}</span>
                           </button>
                         ))}
-                        <label className={`relative flex flex-1 cursor-pointer flex-col items-start rounded-xl border p-3 transition-all ${
-                          activePill === "custom"
-                            ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                            : "border-border hover:border-primary/30 hover:bg-accent/40"
-                        }`}>
+                        <button
+                          type="button"
+                          onClick={() => customDateInputRef.current?.showPicker?.()}
+                          className={`flex flex-1 flex-col items-start rounded-xl border p-3 text-left transition-all ${
+                            activePill === "custom"
+                              ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                              : "border-border hover:border-primary/30 hover:bg-accent/40"
+                          }`}
+                        >
                           <span className={`flex items-center gap-1 text-sm font-bold ${activePill === "custom" ? "text-primary" : ""}`}>
                             <CalendarDays className="h-3.5 w-3.5" />
                             {activePill === "custom" && customDate ? formatShort(customDate) : "Pick"}
@@ -362,8 +362,14 @@ export default function VenueSlideOver({ venue, open, onClose }: Props) {
                           <span className="text-[11px] text-muted-foreground">
                             {activePill === "custom" && customDate ? "Custom" : "Other day"}
                           </span>
-                          <input type="date" value={customDate} min={today} onChange={handleCustomDate} className="absolute inset-0 cursor-pointer opacity-0" />
-                        </label>
+                        </button>
+                        <input
+                          ref={customDateInputRef}
+                          type="date"
+                          min={today}
+                          onChange={handleCustomDate}
+                          className="sr-only"
+                        />
                       </div>
                     </div>
 

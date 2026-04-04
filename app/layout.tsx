@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "./components/Navbar";
+import BottomNav from "./components/BottomNav";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://shuttlespot.vercel.app"),
@@ -29,6 +30,22 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="font-sans antialiased" suppressHydrationWarning>
         <Navbar />
         {children}
+        <BottomNav />
+        <footer className="border-t bg-muted/30 px-4 py-8 pb-24 sm:px-6 md:pb-8">
+          <div className="mx-auto max-w-6xl">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs font-semibold text-foreground">ShuttleSpot</p>
+              <nav className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                <a href="/venues" className="hover:text-foreground transition">All venues</a>
+                <a href="/social" className="hover:text-foreground transition">Find partners</a>
+                <a href="/terms" className="hover:text-foreground transition">Terms</a>
+                <a href="/privacy" className="hover:text-foreground transition">Privacy</a>
+                <a href="mailto:hello@shuttlespot.com.au" className="hover:text-foreground transition">Contact</a>
+              </nav>
+            </div>
+            <p className="mt-4 text-[11px] text-muted-foreground">© {new Date().getFullYear()} ShuttleSpot. Badminton venue discovery across Australia.</p>
+          </div>
+        </footer>
       </body>
     </html>
   );

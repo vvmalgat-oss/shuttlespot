@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, Menu, X, LogOut, User } from "lucide-react";
+import { Search, Menu, X, LogOut, User, Heart } from "lucide-react";
 import SearchModal from "./SearchModal";
 import AuthModal from "./AuthModal";
 import ShuttleSpotLogo from "./ShuttlecockLogo";
@@ -102,10 +102,12 @@ export default function Navbar() {
                     <p className="text-[11px] text-muted-foreground truncate">{user.email}</p>
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="gap-2 text-[13px]">
-                    <User className="h-3.5 w-3.5" />
-                    Profile
-                  </DropdownMenuItem>
+                  <Link href="/saved">
+                    <DropdownMenuItem className="gap-2 text-[13px] cursor-pointer">
+                      <Heart className="h-3.5 w-3.5" />
+                      Saved venues
+                    </DropdownMenuItem>
+                  </Link>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={signOut} className="gap-2 text-[13px] text-destructive focus:text-destructive">
                     <LogOut className="h-3.5 w-3.5" />
@@ -125,28 +127,32 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Mobile nav */}
+        {/* Mobile nav — auth only (navigation handled by BottomNav) */}
         {mobileOpen && (
           <div className="border-t px-4 py-3 md:hidden">
-            {links.map((link) => (
-              <Link key={link.href} href={link.href} onClick={() => setMobileOpen(false)}>
-                <Button variant="ghost" className="w-full justify-start text-[13px]">
-                  {link.label}
-                </Button>
-              </Link>
-            ))}
             {user ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-2 w-full text-[13px] text-destructive hover:text-destructive justify-start gap-2"
-                onClick={signOut}
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                Sign out
-              </Button>
+              <>
+                <div className="px-2 py-1.5 mb-2">
+                  <p className="text-xs font-medium truncate">{user.user_metadata?.full_name || "Account"}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{user.email}</p>
+                </div>
+                <Link href="/saved" onClick={() => setMobileOpen(false)}>
+                  <Button variant="ghost" className="w-full justify-start gap-2 text-[13px]">
+                    <Heart className="h-3.5 w-3.5" /> Saved venues
+                  </Button>
+                </Link>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1 w-full text-[13px] text-destructive hover:text-destructive justify-start gap-2"
+                  onClick={() => { signOut(); setMobileOpen(false); }}
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Sign out
+                </Button>
+              </>
             ) : (
-              <Button size="sm" className="mt-2 w-full text-[13px]" onClick={() => { setMobileOpen(false); setAuthOpen(true); }}>
+              <Button size="sm" className="w-full text-[13px]" onClick={() => { setMobileOpen(false); setAuthOpen(true); }}>
                 Sign in
               </Button>
             )}

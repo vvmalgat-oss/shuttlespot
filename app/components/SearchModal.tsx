@@ -6,7 +6,7 @@ import { useJsApiLoader } from "@react-google-maps/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, MapPin, Navigation } from "lucide-react";
+import { Search, MapPin, Navigation, X } from "lucide-react";
 
 // Must be defined outside the component to avoid "LoadScript reloaded" warnings.
 // Must match the libraries array in VenueMap.tsx.
@@ -142,8 +142,16 @@ export default function SearchModal({ open, onClose, userLocation }: Props) {
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleFreeSearch();
               }}
-              className="pl-9 h-11"
+              className={`h-11 pl-9 ${query ? "pr-10" : ""}`}
             />
+            {query && (
+              <button
+                onClick={() => { setQuery(""); setPredictions([]); inputRef.current?.focus(); }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
           {/* Current location suggestion — shown when no query typed yet */}

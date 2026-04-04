@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -131,7 +132,11 @@ export default function AuthModal({ open, onClose }: Props) {
               {error && <p className="text-xs text-destructive text-center">{error}</p>}
 
               <p className="text-center text-[11px] text-muted-foreground pt-1">
-                By signing in, you agree to our terms of service.
+                By signing in, you agree to our{" "}
+                <Link href="/terms" className="underline underline-offset-2 hover:text-foreground" onClick={handleClose}>
+                  terms of service
+                </Link>
+                .
               </p>
             </>
           )}

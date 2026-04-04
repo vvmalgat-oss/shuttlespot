@@ -7,7 +7,8 @@ import {
   MarkerF,
   InfoWindowF,
 } from "@react-google-maps/api";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { LocateFixed, Loader2 } from "lucide-react";
 
 const LIBRARIES: Libraries = ["places"];
 
@@ -65,6 +66,11 @@ export default function SocialMap({
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || "";
   const mapRef = useRef<google.maps.Map | null>(null);
 
+  // Live GPS location fetched by the locate button
+  const [liveLocation, setLiveLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState(false);
+
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: apiKey,
@@ -109,6 +115,32 @@ export default function SocialMap({
     mapRef.current.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
   }, [validVenues, selectedVenue, userLocation]);
 
+  // Dot shown on map — prefer live GPS hit; fall back to parent-provided location.
+  const dotLocation = liveLocation ?? userLocation ?? null;
+
+  const handleLocateMe = useCallback(() => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    setLocateError(false);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setLiveLocation(loc);
+        setLocating(false);
+        if (mapRef.current) {
+          mapRef.current.panTo(loc);
+          mapRef.current.setZoom(14);
+        }
+      },
+      () => {
+        setLocating(false);
+        setLocateError(true);
+        setTimeout(() => setLocateError(false), 2000);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  }, []);
+
   const placeholder = (msg: string) => (
     <div
       className={`flex items-center justify-center text-center text-[13px] text-slate-400 ${className}`}
@@ -123,94 +155,107 @@ export default function SocialMap({
   if (!isLoaded) return placeholder("Loading map…");
 
   return (
-    <GoogleMap
-      mapContainerStyle={{ width: "100%", height: "100%" }}
-      mapContainerClassName={className}
-      center={userLocation ?? AU_CENTER}
-      zoom={validVenues.length > 0 ? 10 : 5}
-      onLoad={(map) => {
-        mapRef.current = map;
-      }}
-      options={{
-        streetViewControl: false,
-        mapTypeControl: false,
-        fullscreenControl: false,
-        zoomControl: true,
-        clickableIcons: false,
-        styles: [
-          { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
-          { featureType: "transit", elementType: "labels", stylers: [{ visibility: "off" }] },
-        ],
-      }}
-    >
-      {/* ── Venue markers ── */}
-      {validVenues.map((venue) => {
-        const isSelected = venue.id === selectedVenueId;
-        const hasSessions = venue.sessionCount > 0;
-        const iconUrl = makeIconUrl(venue.sessionCount, isSelected, hasSessions);
-        const iconSize = isSelected ? 52 : 42;
-        const iconHeight = isSelected ? 64 : 52;
+    <div className={`relative ${className}`} style={{ width: "100%", height: "100%" }}>
+      <GoogleMap
+        mapContainerStyle={{ width: "100%", height: "100%" }}
+        center={userLocation ?? AU_CENTER}
+        zoom={validVenues.length > 0 ? 10 : 5}
+        onLoad={(map) => { mapRef.current = map; }}
+        options={{
+          streetViewControl: false,
+          mapTypeControl: false,
+          fullscreenControl: false,
+          zoomControl: true,
+          clickableIcons: false,
+          styles: [
+            { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
+            { featureType: "transit", elementType: "labels", stylers: [{ visibility: "off" }] },
+          ],
+        }}
+      >
+        {/* ── Venue markers ── */}
+        {validVenues.map((venue) => {
+          const isSelected = venue.id === selectedVenueId;
+          const hasSessions = venue.sessionCount > 0;
+          const iconUrl = makeIconUrl(venue.sessionCount, isSelected, hasSessions);
+          const iconSize = isSelected ? 52 : 42;
+          const iconHeight = isSelected ? 64 : 52;
 
-        return (
-          <MarkerF
-            key={venue.id}
-            position={{ lat: venue.lat, lng: venue.lng }}
-            title={venue.name}
-            zIndex={isSelected ? 999 : hasSessions ? 2 : 1}
-            onClick={() => onMarkerClick(venue.id)}
-            icon={{
-              url: iconUrl,
-              scaledSize: new google.maps.Size(iconSize, iconHeight),
-              anchor: new google.maps.Point(iconSize / 2, iconHeight - 4),
+          return (
+            <MarkerF
+              key={venue.id}
+              position={{ lat: venue.lat, lng: venue.lng }}
+              title={venue.name}
+              zIndex={isSelected ? 999 : hasSessions ? 2 : 1}
+              onClick={() => onMarkerClick(venue.id)}
+              icon={{
+                url: iconUrl,
+                scaledSize: new google.maps.Size(iconSize, iconHeight),
+                anchor: new google.maps.Point(iconSize / 2, iconHeight - 4),
+              }}
+            />
+          );
+        })}
+
+        {/* ── InfoWindow tooltip for selected venue ── */}
+        {selectedVenue && (
+          <InfoWindowF
+            position={{ lat: selectedVenue.lat, lng: selectedVenue.lng }}
+            options={{
+              pixelOffset: new google.maps.Size(0, -(selectedVenue.id === selectedVenueId ? 64 : 52) + 4),
+              disableAutoPan: true,
             }}
-          />
-        );
-      })}
-
-      {/* ── InfoWindow tooltip for selected venue ── */}
-      {selectedVenue && (
-        <InfoWindowF
-          position={{ lat: selectedVenue.lat, lng: selectedVenue.lng }}
-          options={{
-            pixelOffset: new google.maps.Size(0, -(selectedVenue.id === selectedVenueId ? 64 : 52) + 4),
-            disableAutoPan: true,
-          }}
-          onCloseClick={() => onMarkerClick(selectedVenue.id)} // toggles off
-        >
-          <div style={{ minWidth: 140, maxWidth: 220, padding: "2px 4px" }}>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: 13, color: "#0f172a" }}>
-              {selectedVenue.name}
-            </p>
-            {selectedVenue.sessionCount > 0 ? (
-              <p style={{ margin: "3px 0 0", fontSize: 11, color: "#16a34a", fontWeight: 600 }}>
-                {selectedVenue.sessionCount} open session{selectedVenue.sessionCount !== 1 ? "s" : ""} · tap to view →
+            onCloseClick={() => onMarkerClick(selectedVenue.id)}
+          >
+            <div style={{ minWidth: 140, maxWidth: 220, padding: "2px 4px" }}>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: 13, color: "#0f172a" }}>
+                {selectedVenue.name}
               </p>
-            ) : (
-              <p style={{ margin: "3px 0 0", fontSize: 11, color: "#64748b" }}>
-                No active sessions · tap to post →
-              </p>
-            )}
-          </div>
-        </InfoWindowF>
-      )}
+              {selectedVenue.sessionCount > 0 ? (
+                <p style={{ margin: "3px 0 0", fontSize: 11, color: "#16a34a", fontWeight: 600 }}>
+                  {selectedVenue.sessionCount} open session{selectedVenue.sessionCount !== 1 ? "s" : ""} · tap to view →
+                </p>
+              ) : (
+                <p style={{ margin: "3px 0 0", fontSize: 11, color: "#64748b" }}>
+                  No active sessions · tap to post →
+                </p>
+              )}
+            </div>
+          </InfoWindowF>
+        )}
 
-      {/* ── User location blue dot ── */}
-      {userLocation && (
-        <MarkerF
-          position={userLocation}
-          zIndex={1000}
-          clickable={false}
-          icon={{
-            url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+        {/* ── User / live location dot ── */}
+        {dotLocation && (
+          <MarkerF
+            position={dotLocation}
+            zIndex={1000}
+            clickable={false}
+            icon={{
+              url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
   <circle cx="20" cy="20" r="18" fill="rgba(66,133,244,0.18)" stroke="rgba(66,133,244,0.35)" stroke-width="1.5"/>
   <circle cx="20" cy="20" r="8" fill="#4285F4" stroke="white" stroke-width="3"/>
 </svg>`)}`,
-            scaledSize: new google.maps.Size(40, 40),
-            anchor: new google.maps.Point(20, 20),
-          }}
-        />
-      )}
-    </GoogleMap>
+              scaledSize: new google.maps.Size(40, 40),
+              anchor: new google.maps.Point(20, 20),
+            }}
+          />
+        )}
+      </GoogleMap>
+
+      {/* Current location button — absolutely positioned over the map */}
+      <button
+        onClick={handleLocateMe}
+        disabled={locating}
+        title="Go to my current location"
+        className="absolute top-2 right-2 flex items-center justify-center rounded bg-white shadow-md hover:bg-gray-50 active:bg-gray-100 disabled:cursor-wait"
+        style={{ width: 40, height: 40, zIndex: 9999, border: "1px solid #e2e8f0" }}
+      >
+        {locating
+          ? <span className="animate-spin"><Loader2 size={18} color="#4285F4" /></span>
+          : <LocateFixed size={18} color={locateError ? "#ef4444" : dotLocation ? "#4285F4" : "#555555"} />
+        }
+      </button>
+    </div>
   );
 }

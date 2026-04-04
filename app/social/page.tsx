@@ -7,51 +7,27 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, MapPin, Calendar, Clock, ChevronDown, ChevronUp, Trash2, Search, Map, List, Radio, Navigation, ExternalLink, PartyPopper } from "lucide-react";
+import { Users, MapPin, Calendar, CalendarDays, Clock, ChevronDown, ChevronUp, Trash2, Search, Map, List, Radio, Navigation, ExternalLink, PartyPopper, X } from "lucide-react";
 import AuthModal from "../components/AuthModal";
 import SocialMap from "../components/SocialMap";
 import { useUserLocation } from "../hooks/useUserLocation";
 import type { User } from "@supabase/supabase-js";
 
-type Venue = { id: number; name: string; suburb: string; city: string; state: string; lat: number; lng: number };
+type Venue = { id: number; name: string; suburb: string; city: string; state: string; lat: number; lng: number; open_hour?: number | null; close_hour?: number | null; google_rating?: number | null; google_review_count?: number | null };
 type PlayRequest = { id: number; venue_id: number; venue_name: string; date: string; time_slot: string; player_name: string; player_email: string; skill_level: string; spots_available: number; message: string; status: string; created_at: string };
 type VenueEvent = { id: number; venue_name: string; venue_suburb: string; venue_state: string; title: string; description: string; day_of_week: string; time_slot: string; frequency: string; price: string | null; skill_level: string; booking_url: string | null; source_url: string | null };
 
-// 2-hour slots starting at 8am (earliest any Australian badminton venue opens for casual hire).
-// start/end in 24h for per-venue filtering.
-const ALL_TIME_SLOTS: { label: string; start: number; end: number }[] = [
-  { label: "8:00 AM - 10:00 AM",  start: 8,  end: 10 },
-  { label: "10:00 AM - 12:00 PM", start: 10, end: 12 },
-  { label: "12:00 PM - 2:00 PM",  start: 12, end: 14 },
-  { label: "2:00 PM - 4:00 PM",   start: 14, end: 16 },
-  { label: "4:00 PM - 6:00 PM",   start: 16, end: 18 },
-  { label: "6:00 PM - 8:00 PM",   start: 18, end: 20 },
-  { label: "8:00 PM - 10:00 PM",  start: 20, end: 22 },
-];
-
-// Confirmed opening hours per venue (partial lowercase name match).
-// open/close in 24h. Source: each venue's website.
-const VENUE_HOURS: { match: string; open: number; close: number }[] = [
-  { match: "mitcham badminton",          open: 9,  close: 24 }, // 9am–midnight  (mitchambadminton.com.au)
-  { match: "melbourne badminton centre", open: 8,  close: 23 }, // 8am–11pm      (melbournebadminton.com)
-  { match: "kings park badminton",       open: 8,  close: 24 }, // 8am–midnight  (sydneysportsclub.com.au)
-  { match: "alpha badminton",            open: 9,  close: 23 }, // 9am–11pm      (alphabadminton.com.au)
-  { match: "hunter badminton",           open: 9,  close: 19 }, // 9am–7pm       (hunterbadminton.com.au)
-  { match: "adelaide badminton centre",  open: 11, close: 24 }, // 11am–midnight (adelaidebadmintoncentre.com)
-  { match: "badminton hobart",           open: 9,  close: 21 }, // 9am–9pm       (badmintonhobart.com)
-  { match: "darwin badminton",           open: 18, close: 22 }, // 6pm–10pm      (darwinbadmintonclub.net.au)
-  { match: "southside badminton",        open: 18, close: 22 }, // evening sessions only
-];
-
-const DEFAULT_OPEN = 9;  // 9am: safe default — no casual venue opens earlier
-const DEFAULT_CLOSE = 22; // 10pm: safe default
-
-function getVenueSlots(venueName: string): string[] {
-  const name = venueName.toLowerCase();
-  const hours = VENUE_HOURS.find((h) => name.includes(h.match));
-  const open = hours?.open ?? DEFAULT_OPEN;
-  const close = hours?.close ?? DEFAULT_CLOSE;
-  return ALL_TIME_SLOTS.filter((s) => s.start >= open && s.end <= close).map((s) => s.label);
+/** Generate 1-hour start-time slots using DB open_hour/close_hour (e.g. "9:00am", "10:00am"). */
+function generatePartnerSlots(venue: { open_hour?: number | null; close_hour?: number | null }): string[] {
+  const open = venue.open_hour ?? 9;
+  const close = venue.close_hour ?? 22;
+  const slots: string[] = [];
+  for (let h = open; h < close; h++) {
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    const ampm = h < 12 ? "am" : "pm";
+    slots.push(`${h12}:00${ampm}`);
+  }
+  return slots;
 }
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -101,20 +77,29 @@ function getEventCoords(
   return STATE_CAPITALS[event.venue_state] ?? null;
 }
 
-function getNextDays(count: number): Date[] {
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    return d;
-  });
+function formatDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-function formatDate(d: Date) { return d.toISOString().split("T")[0]; }
 function formatDateLabel(d: Date) {
   const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
 }
 function isToday(d: Date) { return d.toDateString() === new Date().toDateString(); }
+
+function fmtHour(h: number): string {
+  if (h === 0 || h === 24) return "midnight";
+  if (h === 12) return "12pm";
+  return h < 12 ? `${h}am` : `${h - 12}pm`;
+}
+
+function hoursStatus(open?: number | null, close?: number | null): { open: boolean; label: string } | null {
+  if (open == null || close == null) return null;
+  const h = new Date().getHours() + new Date().getMinutes() / 60;
+  if (h >= open && h < (close === 24 ? 24 : close)) return { open: true, label: `Open · closes ${fmtHour(close)}` };
+  if (h < open) return { open: false, label: `Closed · opens ${fmtHour(open)}` };
+  return { open: false, label: `Closed · opens ${fmtHour(open)} tomorrow` };
+}
 
 function FilterPill({ label, active, onClick, icon }: { label: string; active: boolean; onClick: () => void; icon?: React.ReactNode }) {
   return (
@@ -155,6 +140,7 @@ export default function SocialPage() {
   const [stateFilter, setStateFilter] = useState("");
   const [activeOnly, setActiveOnly] = useState(false);
   const [nearMe, setNearMe] = useState(false);
+  const [openNow, setOpenNow] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "map">("list");
   const [liveIndicator, setLiveIndicator] = useState(false);
   // pendingScrollId triggers a scroll after the next DOM paint
@@ -165,7 +151,13 @@ export default function SocialPage() {
   const listContainerRef = useRef<HTMLDivElement>(null);
   const venueRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
-  const dates = getNextDays(7);
+  const [partnersDate, setPartnersDate] = useState<Date>(() => new Date());
+  const [partnersCustomDate, setPartnersCustomDate] = useState("");
+  const partnersDateInputRef = useRef<HTMLInputElement>(null);
+  const todayDate = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
+  const tomorrowDate = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(0,0,0,0); return d; }, []);
+  const todayStr = formatDate(todayDate);
+  const partnersActivePill = isToday(partnersDate) ? "today" : partnersDate.toDateString() === tomorrowDate.toDateString() ? "tomorrow" : "custom";
 
   // Auth
   useEffect(() => {
@@ -178,7 +170,7 @@ export default function SocialPage() {
   useEffect(() => {
     async function load() {
       const [v, r, e] = await Promise.all([
-        supabase.from("venues").select("id, name, suburb, city, state, lat, lng").order("name"),
+        supabase.from("venues").select("id, name, suburb, city, state, lat, lng, open_hour, close_hour, google_rating, google_review_count").order("name"),
         supabase.from("play_requests").select("*").eq("status", "open").gte("date", new Date().toISOString().split("T")[0]).order("created_at", { ascending: false }),
         supabase.from("venue_events").select("*").eq("is_active", true).order("venue_state").order("venue_name"),
       ]);
@@ -257,6 +249,7 @@ export default function SocialPage() {
       }
       if (stateFilter && v.state !== stateFilter) return false;
       if (activeOnly && !sessionCounts[v.id]) return false;
+      if (openNow && !hoursStatus(v.open_hour, v.close_hour)?.open) return false;
       return true;
     });
 
@@ -265,7 +258,7 @@ export default function SocialPage() {
     }
 
     return result;
-  }, [venues, search, stateFilter, activeOnly, nearMe, userLocation, distances, sessionCounts]);
+  }, [venues, search, stateFilter, activeOnly, nearMe, openNow, userLocation, distances, sessionCounts]);
 
   // Fast lookup: venue name → venue row (for event coords + distance)
   const venueByName = useMemo(() => {
@@ -443,7 +436,7 @@ export default function SocialPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-56px)] flex-col">
+    <div className="flex h-[calc(100svh-56px-64px)] flex-col md:h-[calc(100svh-56px)]">
       {/* Header */}
       <div className="flex-shrink-0 border-b bg-background">
         {/* Tab switcher */}
@@ -482,7 +475,12 @@ export default function SocialPage() {
           </div>
           <div className="relative w-48 sm:w-56">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search venues..." className="h-9 pl-9 text-sm" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search venues..." className={`h-9 text-sm pl-9 ${search ? "pr-8" : ""}`} />
+            {search && (
+              <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </div>
         )}
@@ -503,8 +501,13 @@ export default function SocialPage() {
               value={eventSearch}
               onChange={(e) => { setEventSearch(e.target.value); setActiveEventVenueId(null); }}
               placeholder="Search events…"
-              className="h-9 pl-9 text-sm"
+              className={`h-9 text-sm pl-9 ${eventSearch ? "pr-8" : ""}`}
             />
+            {eventSearch && (
+              <button onClick={() => { setEventSearch(""); setActiveEventVenueId(null); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </div>
         )}
@@ -535,7 +538,7 @@ export default function SocialPage() {
           <div className="h-4 w-px shrink-0 bg-border" />
 
           {/* State */}
-          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">State</span>
+          <span className="hidden shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:inline">State</span>
           <div className="flex gap-1">
             <FilterPill label="All" active={!stateFilter} onClick={() => setStateFilter("")} />
             {states.map((s) => (
@@ -552,8 +555,10 @@ export default function SocialPage() {
             }`}
           >
             <Users className="h-3 w-3" />
-            Active only
+            Has sessions
           </button>
+
+          <FilterPill label="🟢 Open now" active={openNow} onClick={() => setOpenNow(!openNow)} />
 
           {!user && (
             <>
@@ -662,6 +667,8 @@ export default function SocialPage() {
                 {displayedEvents.map((event) => {
                   const coords = getEventCoords(event, venueByName, venues);
                   const dist = coords && userLocation ? haversineKm(userLocation.lat, userLocation.lng, coords.lat, coords.lng) : null;
+                  const matchedVenue = venues.find(v => v.name === event.venue_name || (v.suburb?.toLowerCase() === event.venue_suburb?.toLowerCase() && v.state === event.venue_state));
+                  const hrs = matchedVenue ? hoursStatus(matchedVenue.open_hour, matchedVenue.close_hour) : null;
                   return (
                     <div key={event.id} className="flex flex-col rounded-xl border bg-card p-4 transition hover:shadow-sm">
                       <p className="font-semibold leading-snug">{event.title}</p>
@@ -673,7 +680,24 @@ export default function SocialPage() {
                           <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">{dist.toFixed(1)} km</span>
                         )}
                       </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                      {/* Hours + Google rating row */}
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        {hrs && (
+                          <span className={`flex items-center gap-1 text-[11px] font-medium ${hrs.open ? "text-emerald-600" : "text-muted-foreground"}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${hrs.open ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                            {hrs.label}
+                          </span>
+                        )}
+                        {matchedVenue?.google_rating != null && matchedVenue?.google_review_count != null && (
+                          <span className="flex items-center gap-0.5 text-[11px]">
+                            <svg width="10" height="10" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                            <span className="font-semibold">{matchedVenue.google_rating.toFixed(1)}</span>
+                            <span className="text-amber-400">★</span>
+                            <span className="text-muted-foreground">({matchedVenue.google_review_count.toLocaleString()})</span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" />{event.day_of_week}</span>
                         {event.time_slot && <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{event.time_slot}</span>}
                       </div>
@@ -795,11 +819,27 @@ export default function SocialPage() {
                               </span>
                             )}
                           </div>
-                          {sessionsCount > 0 && (
-                            <Badge variant="secondary" className="mt-1 bg-emerald-500/10 text-[10px] text-emerald-700">
-                              {sessionsCount} active session{sessionsCount !== 1 ? "s" : ""}
-                            </Badge>
-                          )}
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            {(() => { const hrs = hoursStatus(venue.open_hour, venue.close_hour); return hrs ? (
+                              <span className={`flex items-center gap-1 text-[11px] font-medium ${hrs.open ? "text-emerald-600" : "text-muted-foreground"}`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${hrs.open ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                                {hrs.label}
+                              </span>
+                            ) : null; })()}
+                            {venue.google_rating != null && venue.google_review_count != null && (
+                              <span className="flex items-center gap-0.5 text-[11px]">
+                                <svg width="10" height="10" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                                <span className="font-semibold">{venue.google_rating.toFixed(1)}</span>
+                                <span className="text-amber-400">★</span>
+                                <span className="text-muted-foreground">({venue.google_review_count.toLocaleString()})</span>
+                              </span>
+                            )}
+                            {sessionsCount > 0 && (
+                              <Badge variant="secondary" className="bg-emerald-500/10 text-[10px] text-emerald-700">
+                                {sessionsCount} active session{sessionsCount !== 1 ? "s" : ""}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
                       {isExpanded ? <ChevronUp className="h-4 w-4 shrink-0 text-primary" /> : <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />}
@@ -807,86 +847,131 @@ export default function SocialPage() {
 
                     {isExpanded && (
                       <div className="border-t bg-card px-4 pb-5 pt-4">
-                        <div className="space-y-5">
-                          {dates.map((date) => {
-                            const dateStr = formatDate(date);
-                            const dayRequests = requests.filter((r) => r.venue_id === venue.id && r.date === dateStr);
-                            return (
-                              <div key={date.toISOString()}>
-                                <div className="mb-2 flex items-center gap-1.5">
-                                  <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                                  <h4 className={`text-xs font-semibold ${isToday(date) ? "text-primary" : "text-foreground"}`}>
-                                    {formatDateLabel(date)}{isToday(date) && " · Today"}
-                                  </h4>
-                                  {dayRequests.length > 0 && (
-                                    <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700">
-                                      {dayRequests.length} open
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-                                  {getVenueSlots(venue.name).map((slot) => {
-                                    const session = getSession(venue.id, date, slot);
-                                    const hasPlayer = !!session;
-                                    const isOwn = hasPlayer && user?.email === session.player_email;
+                        {/* Date picker */}
+                        <div className="mb-4 flex gap-1.5">
+                          {[
+                            { key: "today", label: "Today", date: todayDate },
+                            { key: "tomorrow", label: "Tomorrow", date: tomorrowDate },
+                          ].map(({ key, label, date }) => (
+                            <button
+                              key={key}
+                              onClick={() => { setPartnersDate(date); setPartnersCustomDate(""); }}
+                              className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+                                partnersActivePill === key
+                                  ? "bg-primary text-primary-foreground"
+                                  : "border bg-background text-foreground hover:bg-accent"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => partnersDateInputRef.current?.showPicker?.()}
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+                              partnersActivePill === "custom"
+                                ? "bg-primary text-primary-foreground"
+                                : "border bg-background text-foreground hover:bg-accent"
+                            }`}
+                          >
+                            <span className="flex items-center gap-1">
+                              <CalendarDays className="h-3 w-3" />
+                              {partnersActivePill === "custom" && partnersCustomDate
+                                ? partnersDate.toLocaleDateString("en-AU", { day: "numeric", month: "short" })
+                                : "Other day"}
+                            </span>
+                          </button>
+                          <input
+                            ref={partnersDateInputRef}
+                            type="date"
+                            min={todayStr}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (!val) return;
+                              setPartnersCustomDate(val);
+                              const [y, mo, d] = val.split("-").map(Number);
+                              setPartnersDate(new Date(y, mo - 1, d));
+                            }}
+                            className="sr-only"
+                          />
+                          <span className="ml-auto self-center text-[11px] text-muted-foreground">
+                            {formatDateLabel(partnersDate)}{isToday(partnersDate) && " · Today"}
+                          </span>
+                        </div>
 
-                                    if (isOwn) {
-                                      return (
-                                        <div key={slot} className="flex flex-col gap-1 rounded-lg border-2 border-primary bg-primary/5 px-2.5 py-2">
-                                          <span className="flex items-center gap-1 text-[10px] font-semibold text-primary">
-                                            <Clock className="h-3 w-3 shrink-0" />{slot.split(" - ")[0]}
-                                          </span>
-                                          <span className="truncate text-[11px] font-semibold">{session.player_name}</span>
-                                          <span className="text-[10px] text-muted-foreground">{session.skill_level}</span>
-                                          <button
-                                            onClick={(e) => handleDelete(e, session.id)}
-                                            disabled={deleting === session.id}
-                                            className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold text-destructive transition hover:bg-destructive/20"
-                                          >
-                                            <Trash2 className="h-2.5 w-2.5" />
-                                            {deleting === session.id ? "Removing…" : "Remove"}
-                                          </button>
-                                        </div>
-                                      );
-                                    }
+                        {/* Slot grid for selected date */}
+                        {(() => {
+                          const dayRequests = requests.filter((r) => r.venue_id === venue.id && r.date === formatDate(partnersDate));
+                          const slots = generatePartnerSlots(venue);
+                          return (
+                            <div>
+                              {dayRequests.length > 0 && (
+                                <p className="mb-2 text-[10px] font-semibold text-emerald-700">
+                                  {dayRequests.length} player{dayRequests.length !== 1 ? "s" : ""} looking to play
+                                </p>
+                              )}
+                              <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4">
+                                {slots.map((slot) => {
+                                  const session = getSession(venue.id, partnersDate, slot);
+                                  const hasPlayer = !!session;
+                                  const isOwn = hasPlayer && user?.email === session.player_email;
 
-                                    if (hasPlayer) {
-                                      return (
+                                  if (isOwn) {
+                                    return (
+                                      <div key={slot} className="flex flex-col gap-1 rounded-lg border-2 border-primary bg-primary/5 px-2 py-2">
+                                        <span className="flex items-center gap-1 text-[10px] font-semibold text-primary">
+                                          <Clock className="h-3 w-3 shrink-0" />{slot}
+                                        </span>
+                                        <span className="truncate text-[11px] font-semibold">{session.player_name}</span>
+                                        <span className="text-[10px] text-muted-foreground">{session.skill_level}</span>
                                         <button
-                                          key={slot}
-                                          onClick={() => handleSlotClick(venue, date, slot)}
-                                          className="flex flex-col gap-1 rounded-lg border-2 border-emerald-400 bg-emerald-50 px-2.5 py-2 text-left transition hover:bg-emerald-100"
+                                          onClick={(e) => handleDelete(e, session.id)}
+                                          disabled={deleting === session.id}
+                                          className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold text-destructive transition hover:bg-destructive/20"
                                         >
-                                          <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700">
-                                            <Clock className="h-3 w-3 shrink-0" />{slot.split(" - ")[0]}
-                                          </span>
-                                          <span className="truncate text-[11px] font-semibold text-foreground">{session.player_name}</span>
-                                          <span className="text-[10px] text-muted-foreground">{session.skill_level}</span>
-                                          <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white">
-                                            <Users className="h-2.5 w-2.5" /> Join
-                                          </span>
+                                          <Trash2 className="h-2.5 w-2.5" />
+                                          {deleting === session.id ? "Removing…" : "Remove"}
                                         </button>
-                                      );
-                                    }
+                                      </div>
+                                    );
+                                  }
 
+                                  if (hasPlayer) {
                                     return (
                                       <button
                                         key={slot}
-                                        onClick={() => handleSlotClick(venue, date, slot)}
-                                        className="flex h-auto flex-col gap-0.5 rounded-lg border bg-background px-2.5 py-2 text-left text-[11px] transition hover:border-primary/40 hover:bg-primary/5"
+                                        onClick={() => handleSlotClick(venue, partnersDate, slot)}
+                                        className="flex flex-col gap-1 rounded-lg border-2 border-emerald-400 bg-emerald-50 px-2 py-2 text-left transition hover:bg-emerald-100"
                                       >
-                                        <span className="flex items-center gap-1 text-muted-foreground">
-                                          <Clock className="h-3 w-3" />{slot.split(" - ")[0]}
+                                        <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700">
+                                          <Clock className="h-3 w-3 shrink-0" />{slot}
                                         </span>
-                                        <span className="text-[10px] text-muted-foreground/60">Available</span>
+                                        <span className="truncate text-[11px] font-semibold text-foreground">{session.player_name}</span>
+                                        <span className="text-[10px] text-muted-foreground">{session.skill_level}</span>
+                                        <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white">
+                                          <Users className="h-2.5 w-2.5" /> Join
+                                        </span>
                                       </button>
                                     );
-                                  })}
-                                </div>
+                                  }
+
+                                  return (
+                                    <button
+                                      key={slot}
+                                      onClick={() => handleSlotClick(venue, partnersDate, slot)}
+                                      className="flex h-auto flex-col gap-0.5 rounded-lg border bg-background px-2 py-2 text-left text-[11px] transition hover:border-primary/40 hover:bg-primary/5"
+                                    >
+                                      <span className="flex items-center gap-1 text-muted-foreground">
+                                        <Clock className="h-3 w-3" />{slot}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground/60">Open</span>
+                                    </button>
+                                  );
+                                })}
                               </div>
-                            );
-                          })}
-                        </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>

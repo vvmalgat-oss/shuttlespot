@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Search, ArrowRight, MapPin, Users, CalendarDays, Zap, Navigation } from "lucide-react";
 import SearchModal from "./components/SearchModal";
+import StarRating from "./components/StarRating";
 import { supabase } from "../supabase";
 import { useUserLocation } from "./hooks/useUserLocation";
 import { useEffect } from "react";
@@ -15,7 +16,11 @@ type Venue = {
   id: number; name: string; city: string; state: string;
   courts: number; price: string; lat: number; lng: number;
   booking_url: string; distance?: number;
+  open_hour?: number | null; close_hour?: number | null;
+  google_rating?: number | null; google_review_count?: number | null;
 };
+
+type RatingStats = { avg_rating: number; review_count: number };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -32,7 +37,7 @@ const CITIES = [
 const HOW = [
   { icon: Search,       label: "Search your area",     desc: "Find courts by suburb, city or postcode" },
   { icon: CalendarDays, label: "Pick your time",        desc: "Choose date, duration and a start time" },
-  { icon: Users,        label: "Book or find partners", desc: "Proceed to booking or join other players" },
+  { icon: Users,        label: "Book, find partners or join a group", desc: "Book a court, post your availability to find a partner, or join a group session near you" },
 ];
 
 const GRADIENTS = [
@@ -65,6 +70,21 @@ function nearestCity(lat: number, lng: number) {
   });
 }
 
+function fmtHour(h: number): string {
+  if (h === 0 || h === 24) return "midnight";
+  if (h === 12) return "12pm";
+  return h < 12 ? `${h}am` : `${h - 12}pm`;
+}
+
+function hoursStatus(openHour?: number | null, closeHour?: number | null): { open: boolean; label: string } | null {
+  if (openHour == null || closeHour == null) return null;
+  const h = new Date().getHours() + new Date().getMinutes() / 60;
+  const close = closeHour === 24 ? 24 : closeHour;
+  if (h >= openHour && h < close) return { open: true, label: `Open · closes ${fmtHour(closeHour)}` };
+  if (h < openHour) return { open: false, label: `Closed · opens ${fmtHour(openHour)}` };
+  return { open: false, label: `Closed · opens ${fmtHour(openHour)} tomorrow` };
+}
+
 function avatarGradient(name: string) {
   const h = [...name].reduce((a, c) => a + c.charCodeAt(0), 0);
   return GRADIENTS[h % GRADIENTS.length];
@@ -79,17 +99,26 @@ function initials(name: string) {
 export default function Home() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [allVenues, setAllVenues] = useState<Venue[]>([]);
+  const [ratingStatsMap, setRatingStatsMap] = useState<Record<number, RatingStats>>({});
   const { location: userLoc, status: locStatus, request: requestLocation } = useUserLocation();
 
-  // Fetch all venues once
+  // Fetch all venues + rating stats once
   useEffect(() => {
-    supabase
-      .from("venues")
-      .select("id, name, city, state, courts, price, lat, lng, booking_url")
-      .then(({ data }) => { if (data) setAllVenues(data as Venue[]); });
+    Promise.all([
+      supabase.from("venues").select("id, name, city, state, courts, price, lat, lng, booking_url, open_hour, close_hour, google_rating, google_review_count"),
+      supabase.from("venue_rating_stats").select("venue_id, avg_rating, review_count"),
+    ]).then(([{ data, error }, { data: statsData }]) => {
+      if (error) console.error("Venues fetch error:", error);
+      if (data && data.length > 0) setAllVenues(data as Venue[]);
+      if (statsData) {
+        const map: Record<number, RatingStats> = {};
+        statsData.forEach((s: RatingStats & { venue_id: number }) => { map[s.venue_id] = s; });
+        setRatingStatsMap(map);
+      }
+    });
   }, []);
 
-  // Sort venues by distance when location is available, else by courts
+  // Sort venues by distance when location is available, else by Google rating / courts
   const featured = useMemo<Venue[]>(() => {
     if (allVenues.length === 0) return [];
     if (userLoc) {
@@ -99,13 +128,13 @@ export default function Home() {
         .sort((a, b) => (a.distance ?? 999) - (b.distance ?? 999))
         .slice(0, 6);
     }
-    if (locStatus === "denied") {
-      return [...allVenues].sort((a, b) => (b.courts || 0) - (a.courts || 0)).slice(0, 6);
-    }
-    return [];
-  }, [allVenues, userLoc, locStatus]);
+    // Always fall back to top-rated venues — never show empty
+    return [...allVenues]
+      .sort((a, b) => (b.google_rating ?? 0) - (a.google_rating ?? 0) || (b.courts || 0) - (a.courts || 0))
+      .slice(0, 6);
+  }, [allVenues, userLoc]);
 
-  // "View all" link — when location is granted use the nearest known city so search returns results
+  // "View all" link — use nearest city when location granted
   const viewAllHref = useMemo(() => {
     if (userLoc) {
       const city = nearestCity(userLoc.lat, userLoc.lng);
@@ -114,10 +143,11 @@ export default function Home() {
     return "/venues";
   }, [userLoc]);
 
-  const showSkeleton = locStatus === "requesting" || (locStatus !== "denied" && featured.length === 0 && allVenues.length === 0);
+  // Only skeleton while actively requesting AND no venues loaded yet
+  const showSkeleton = locStatus === "requesting" && allVenues.length === 0;
 
   return (
-    <div className="min-h-[calc(100vh-56px)]">
+    <div className="min-h-[calc(100vh-56px)] pb-16 md:pb-0">
 
       {/* ── Hero with background video ── */}
       <section className="relative flex min-h-[600px] items-center overflow-hidden px-4 pb-20 pt-28 sm:min-h-[680px] sm:pb-28 sm:pt-36">
@@ -240,10 +270,12 @@ export default function Home() {
           {/* Venue cards */}
           {!showSkeleton && featured.length > 0 && (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {featured.map((v) => (
+              {featured.map((v) => {
+                const hrs = hoursStatus(v.open_hour, v.close_hour);
+                return (
                 <Link
                   key={v.id}
-                  href={`/search?location=${encodeURIComponent([v.city, v.state].filter(Boolean).join(", "))}&lat=${userLoc?.lat ?? v.lat}&lng=${userLoc?.lng ?? v.lng}`}
+                  href={`/search?location=${encodeURIComponent([v.city, v.state].filter(Boolean).join(", "))}&lat=${v.lat}&lng=${v.lng}&venueId=${v.id}`}
                   className="group flex items-start gap-3 rounded-xl border bg-card p-4 transition-all hover:border-primary/30 hover:shadow-md"
                 >
                   <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-xs font-bold text-white ${avatarGradient(v.name)}`}>
@@ -251,30 +283,74 @@ export default function Home() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{v.name}</p>
-                    {v.distance != null ? (
-                      <p className="text-xs text-muted-foreground">{v.distance.toFixed(1)} km away</p>
+                    {hrs ? (
+                      <p className={`flex items-center gap-1 text-xs font-medium ${hrs.open ? "text-emerald-600" : "text-muted-foreground"}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${hrs.open ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                        {hrs.label}
+                      </p>
                     ) : (
-                      <p className="text-xs text-muted-foreground">{[v.city, v.state].filter(Boolean).join(", ")}</p>
+                      <p className="text-xs text-muted-foreground">{v.distance != null ? `${v.distance.toFixed(1)} km away` : [v.city, v.state].filter(Boolean).join(", ")}</p>
                     )}
-                    <div className="mt-1.5 flex items-center gap-2">
+                    <div className="mt-1 flex items-center gap-2 flex-wrap">
+                      {v.google_rating != null && v.google_review_count != null && (
+                        <span className="flex items-center gap-0.5 text-[11px]">
+                          <svg width="10" height="10" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                          <span className="font-semibold">{v.google_rating.toFixed(1)}</span>
+                          <span className="text-amber-400">★</span>
+                          <span className="text-muted-foreground">({v.google_review_count.toLocaleString()})</span>
+                        </span>
+                      )}
+                      {ratingStatsMap[v.id]?.review_count > 0 && (
+                        <StarRating rating={ratingStatsMap[v.id].avg_rating} count={ratingStatsMap[v.id].review_count} size="xs" />
+                      )}
                       {v.price && <span className="text-xs font-semibold text-primary">{v.price}</span>}
                       {v.courts ? <span className="text-xs text-muted-foreground">{v.courts} courts</span> : null}
+                      {hrs && v.distance != null && <span className="text-xs text-muted-foreground">{v.distance.toFixed(1)} km</span>}
                     </div>
                   </div>
                   <ArrowRight className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground/30 transition group-hover:text-primary" />
                 </Link>
-              ))}
+                );
+              })}
             </div>
           )}
 
-          {/* Denied + empty fallback */}
-          {locStatus === "denied" && featured.length === 0 && allVenues.length > 0 && (
-            <p className="text-sm text-muted-foreground">
-              <button onClick={requestLocation} className="text-primary underline-offset-2 hover:underline">Enable location</button>{" "}
-              to see venues near you, or{" "}
-              <Link href="/venues" className="text-primary underline-offset-2 hover:underline">browse all venues</Link>.
-            </p>
-          )}
+        </div>
+      </section>
+
+      {/* ── Browse by city ── */}
+      <section className="border-t px-4 py-12 sm:py-14">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="mb-1 text-base font-bold">Browse by city</h2>
+          <p className="mb-6 text-xs text-muted-foreground">Indoor badminton venues across Australia</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { city: "melbourne", label: "Melbourne", state: "VIC", color: "from-blue-600 to-indigo-700" },
+              { city: "sydney",    label: "Sydney",    state: "NSW", color: "from-emerald-500 to-teal-700" },
+              { city: "brisbane",  label: "Brisbane",  state: "QLD", color: "from-red-500 to-rose-700" },
+              { city: "perth",     label: "Perth",     state: "WA",  color: "from-amber-500 to-orange-600" },
+              { city: "adelaide",  label: "Adelaide",  state: "SA",  color: "from-purple-500 to-violet-700" },
+              { city: "canberra",  label: "Canberra",  state: "ACT", color: "from-cyan-500 to-blue-600" },
+              { city: "hobart",    label: "Hobart",    state: "TAS", color: "from-green-600 to-emerald-700" },
+              { city: "darwin",    label: "Darwin",    state: "NT",  color: "from-orange-500 to-red-600" },
+            ].map(({ city, label, state, color }) => {
+              const count = allVenues.filter((v) => v.state === state).length;
+              return (
+                <Link
+                  key={city}
+                  href={`/venues/${city}`}
+                  className={`group relative overflow-hidden rounded-xl bg-gradient-to-br ${color} p-4 text-white transition-all hover:shadow-lg hover:scale-[1.02]`}
+                >
+                  <div className="absolute inset-0 bg-black/10" />
+                  <div className="relative z-10">
+                    <p className="text-base font-bold">{label}</p>
+                    {count > 0 && <p className="mt-0.5 text-[11px] text-white/70">{count} venue{count !== 1 ? "s" : ""}</p>}
+                  </div>
+                  <ArrowRight className="absolute bottom-3 right-3 h-4 w-4 text-white/40 transition group-hover:text-white/80" />
+                </Link>
+              );
+            })}
+          </div>
         </div>
       </section>
 

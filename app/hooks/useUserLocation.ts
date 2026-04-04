@@ -22,7 +22,7 @@ export function useUserLocation() {
         setStatus("granted");
       },
       () => setStatus("denied"),
-      { timeout: 10000, enableHighAccuracy: false }
+      { timeout: 10000, enableHighAccuracy: true }
     );
   }, []);
 
