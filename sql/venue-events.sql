@@ -157,6 +157,20 @@ INSERT INTO venue_events (venue_name, venue_suburb, venue_state, title, descript
  'https://mitchambadminton.yepbooking.com.au/',
  'https://www.mitchambadminton.com.au/'),
 
+('Beyond Badminton Centre', 'Clayton', 'VIC',
+ 'Thursday BBC Social',
+ 'Doubles-only court rotation social at Beyond Badminton Centre (18 courts). Courts 5–11 used. Shuttles provided, bring your own racquet. Non-marking shoes required. Free onsite parking. Ticket required — purchase via Luma before attending.',
+ 'Thursday', '8:30 PM – 11:00 PM', 'weekly', '$20/session', 'Intermediate to Advanced',
+ 'https://luma.com/ni74q8u1',
+ 'https://luma.com/ni74q8u1'),
+
+('Beyond Badminton Centre', 'Clayton', 'VIC',
+ 'Saturday Morning Social',
+ 'Social badminton at Beyond Badminton Centre. 18 courts available. Online booking via YEP!Booking. Non-marking shoes required.',
+ 'Saturday', '11:00 AM – 1:00 PM', 'weekly', '$17/session', 'All levels',
+ 'https://beyondbadminton.yepbooking.com.au/',
+ 'https://www.beyondbadminton.com.au/'),
+
 -- ─── NEW SOUTH WALES ──────────────────────────────────────────────────────────
 
 ('Kings Park Badminton Centre', 'Kings Park', 'NSW',
@@ -222,6 +236,34 @@ INSERT INTO venue_events (venue_name, venue_suburb, venue_state, title, descript
  'https://hunterbadminton.yepbooking.com.au/',
  'https://www.hunterbadminton.com.au/social-play/'),
 
+('Victor Badminton Centre', 'Botany', 'NSW',
+ 'Saturday Social Badminton',
+ 'Intermediate-level social session — 2 courts booked, max 16 players. Games to 30 points, 1 shuttle per game. Full refund if cancelled 48+ hours prior. Book via OpenSports.',
+ 'Saturday', '10:00 AM – 1:00 PM', 'weekly', '$17/session', 'Intermediate',
+ 'https://opensports.net/posts/saturday-social-badminton-botany-eM-7KeIc',
+ 'https://opensports.net/posts/saturday-social-badminton-botany-eM-7KeIc'),
+
+('Victor Badminton Centre', 'Botany', 'NSW',
+ 'Wednesday Social Badminton',
+ 'Intermediate-level evening social — 2 courts, max 16 players. Games to 30 points. Full refund if cancelled 48+ hours prior. Book via OpenSports.',
+ 'Wednesday', '7:00 PM – 10:00 PM', 'weekly', '$17/session', 'Intermediate',
+ 'https://opensports.net/posts/intermediate-wednesday-social-badminton-botany-VSKT2-7Xm',
+ 'https://opensports.net/posts/intermediate-wednesday-social-badminton-botany-VSKT2-7Xm'),
+
+('AC Badminton Club', 'Auburn', 'NSW',
+ 'Thursday Evening Social',
+ 'Social badminton at Alpha Badminton Auburn. Shuttles included. All levels welcome — beginners to advanced. Opening special pricing applies.',
+ 'Thursday', '8:00 PM – 11:00 PM', 'weekly', '$17/session', 'All levels',
+ 'https://alphabadminton.yepbooking.com.au/',
+ 'https://alphabadminton.com.au/'),
+
+('AC Badminton Club', 'Auburn', 'NSW',
+ 'Sunday Evening Social',
+ 'Social badminton at Alpha Badminton Auburn. Shuttles included. All levels welcome. Opening special pricing applies.',
+ 'Sunday', '7:00 PM – 10:00 PM', 'weekly', '$15/session', 'All levels',
+ 'https://alphabadminton.yepbooking.com.au/',
+ 'https://alphabadminton.com.au/'),
+
 -- ─── QUEENSLAND ───────────────────────────────────────────────────────────────
 
 ('Southside Badminton Club', 'Varsity Lakes', 'QLD',
@@ -230,6 +272,13 @@ INSERT INTO venue_events (venue_name, venue_suburb, venue_state, title, descript
  'Monday, Tuesday, Wednesday, Thursday, Saturday', '7:30 PM – 9:30 PM', 'weekly', '$15/session', 'All levels',
  'https://events.humanitix.com/southside-badminton-club-session-booking/tickets',
  'https://events.humanitix.com/southside-badminton-club-session-booking'),
+
+('Brisbane Badminton', 'Crestmead', 'QLD',
+ 'Morning Social Sessions',
+ 'Air-conditioned 9-court facility at 39 Quilton Place, Crestmead. Structured rotation system with mixed partners for balanced games. Walk-ins welcome. Book via YEP!Booking.',
+ 'Monday, Wednesday, Friday', '10:00 AM – 12:00 PM', 'weekly', '$10/session', 'All levels',
+ 'https://badmintonbrisbane.yepbooking.com.au/',
+ 'https://badmintonbrisbane.yepbooking.com.au/'),
 
 ('Sunnybank Hills Badminton Club', 'South Brisbane', 'QLD',
  'BSHS Socials – Brisbane City',

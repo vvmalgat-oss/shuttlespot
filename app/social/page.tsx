@@ -137,6 +137,7 @@ export default function SocialPage() {
   const [venueEvents, setVenueEvents] = useState<VenueEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventStateFilter, setEventStateFilter] = useState("");
+  const [eventSearch, setEventSearch] = useState("");
   const [nearMeEvents, setNearMeEvents] = useState(false);
   const [eventsMobileView, setEventsMobileView] = useState<"list" | "map">("list");
   const [activeEventVenueId, setActiveEventVenueId] = useState<number | null>(null);
@@ -292,6 +293,15 @@ export default function SocialPage() {
 
   const filteredEvents = useMemo(() => {
     let result = venueEvents.filter((e) => {
+      if (eventSearch) {
+        const q = eventSearch.toLowerCase();
+        if (
+          !e.venue_name.toLowerCase().includes(q) &&
+          !e.venue_suburb?.toLowerCase().includes(q) &&
+          !e.title.toLowerCase().includes(q) &&
+          !e.venue_state.toLowerCase().includes(q)
+        ) return false;
+      }
       if (eventStateFilter && e.venue_state !== eventStateFilter) return false;
       // Near me: filter to user's detected state (reliable even when exact venue
       // coords aren't in the venues table — clubs, associations, etc.)
@@ -310,7 +320,7 @@ export default function SocialPage() {
     }
 
     return result;
-  }, [venueEvents, venueByName, venues, eventStateFilter, nearMeEvents, userState, userLocation]);
+  }, [venueEvents, venueByName, venues, eventSearch, eventStateFilter, nearMeEvents, userState, userLocation]);
 
   // Events filtered further by map marker selection
   const displayedEvents = useMemo(() => {
@@ -483,9 +493,18 @@ export default function SocialPage() {
             <h1 className="text-base font-bold">Group Events at Venues</h1>
             <p className="text-xs text-muted-foreground">
               {eventsLoading ? "Loading…" : userLocation
-                ? `${filteredEvents.length} events · sorted by distance`
-                : `${filteredEvents.length} events across Australia`}
+                ? `${displayedEvents.length} events · sorted by distance`
+                : `${displayedEvents.length} events across Australia`}
             </p>
+          </div>
+          <div className="relative w-48 sm:w-56">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={eventSearch}
+              onChange={(e) => { setEventSearch(e.target.value); setActiveEventVenueId(null); }}
+              placeholder="Search events…"
+              className="h-9 pl-9 text-sm"
+            />
           </div>
         </div>
         )}
@@ -575,7 +594,7 @@ export default function SocialPage() {
             />
           )}
           <div className="h-4 w-px shrink-0 bg-border" />
-          <FilterPill label="All" active={!eventStateFilter && !nearMeEvents} onClick={() => { setEventStateFilter(""); setNearMeEvents(false); setActiveEventVenueId(null); }} />
+          <FilterPill label="All" active={!eventStateFilter && !nearMeEvents} onClick={() => { setEventStateFilter(""); setNearMeEvents(false); setActiveEventVenueId(null); setEventSearch(""); }} />
           {eventStates.map((s) => (
             <FilterPill key={s} label={s} active={eventStateFilter === s} onClick={() => { setEventStateFilter(eventStateFilter === s ? "" : s); setNearMeEvents(false); setActiveEventVenueId(null); }} />
           ))}
@@ -634,7 +653,7 @@ export default function SocialPage() {
                 <p className="mt-3 text-sm text-muted-foreground">
                   {nearMeEvents ? "No events within 50 km" : "No events found"}
                 </p>
-                <button onClick={() => { setEventStateFilter(""); setNearMeEvents(false); setActiveEventVenueId(null); }} className="mt-2 text-sm text-primary hover:underline">
+                <button onClick={() => { setEventStateFilter(""); setNearMeEvents(false); setActiveEventVenueId(null); setEventSearch(""); }} className="mt-2 text-sm text-primary hover:underline">
                   Show all events
                 </button>
               </div>
