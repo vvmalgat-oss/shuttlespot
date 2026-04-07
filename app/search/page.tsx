@@ -14,14 +14,29 @@ import { useUserLocation } from "../hooks/useUserLocation";
 import { useSavedVenues } from "../hooks/useSavedVenues";
 import AuthModal from "../components/AuthModal";
 
-type Venue = { id: number; name: string; suburb: string; address: string; city: string; state: string; courts: number; price: string; booking_url: string; lat: number; lng: number; open_hour?: number | null; close_hour?: number | null; google_rating?: number | null; google_review_count?: number | null };
+type Venue = {
+  id: number; name: string; suburb: string; address: string; city: string; state: string;
+  courts: number; price: string; booking_url: string; lat: number; lng: number;
+  photo_url?: string | null;
+  open_hour?: number | null; close_hour?: number | null;
+  open_hour_weekend?: number | null; close_hour_weekend?: number | null;
+  min_duration?: number | null;
+  peak_start_hour?: number | null; peak_end_hour?: number | null;
+  late_night_hour?: number | null; late_night_price?: number | null;
+  opening_hours?: string | null;
+  google_rating?: number | null; google_review_count?: number | null;
+};
 type RatingStats = { avg_rating: number; review_count: number };
 type SortKey = "distance" | "rating" | "price-asc" | "price-desc" | "courts";
 
 function isOpenNow(v: Venue): boolean {
-  if (v.open_hour == null || v.close_hour == null) return false;
+  const day = new Date().getDay();
+  const isWeekend = day === 0 || day === 6;
+  const open = isWeekend ? (v.open_hour_weekend ?? v.open_hour) : v.open_hour;
+  const close = isWeekend ? (v.close_hour_weekend ?? v.close_hour) : v.close_hour;
+  if (open == null || close == null) return false;
   const h = new Date().getHours() + new Date().getMinutes() / 60;
-  return h >= v.open_hour && h < (v.close_hour === 24 ? 24 : v.close_hour);
+  return h >= open && h < (close === 24 ? 24 : close);
 }
 
 function getDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
