@@ -158,7 +158,6 @@ export default function Home() {
           muted
           loop
           playsInline
-          poster="https://images.pexels.com/photos/8796050/pexels-photo-8796050.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop"
           className="absolute inset-0 h-full w-full object-cover object-center"
         >
           {/* Download a free badminton video from https://www.pexels.com/video/teammates-playing-badminton-8053653/

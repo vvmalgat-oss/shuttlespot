@@ -45,7 +45,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </div>
             <div className="mt-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-[11px] text-muted-foreground">© {new Date().getFullYear()} ShuttleSpot. Badminton venue discovery across Australia.</p>
-              <p className="text-[11px] text-muted-foreground">Hero media by <a href="https://www.pexels.com/@luthfi-ali-qodri" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition">Luthfi Ali Qodri</a> &amp; <a href="https://www.pexels.com/@shvets-production" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition">SHVETS production</a> via <a href="https://www.pexels.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition">Pexels</a></p>
+              <p className="text-[11px] text-muted-foreground">Hero video by <a href="https://www.pexels.com/@shvets-production" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition">SHVETS production</a> via <a href="https://www.pexels.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition">Pexels</a></p>
             </div>
           </div>
         </footer>
