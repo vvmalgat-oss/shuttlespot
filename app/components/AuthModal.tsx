@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 
-type Props = { open: boolean; onClose: () => void };
+type Props = { open: boolean; onClose: () => void; reason?: string };
 
-export default function AuthModal({ open, onClose }: Props) {
+export default function AuthModal({ open, onClose, reason }: Props) {
   const [email, setEmail] = useState("");
   const [emailSent, setEmailSent] = useState(false);
   const [loading, setLoading] = useState<"google" | "facebook" | "email" | null>(null);
@@ -68,7 +68,7 @@ export default function AuthModal({ open, onClose }: Props) {
       <DialogContent className="sm:max-w-[400px] gap-0 p-0 overflow-hidden">
         <DialogHeader className="p-6 pb-4">
           <DialogTitle className="text-xl">Sign in to ShuttleSpot</DialogTitle>
-          <DialogDescription>Find courts and connect with players</DialogDescription>
+          <DialogDescription>{reason ?? "Find courts and connect with players"}</DialogDescription>
         </DialogHeader>
 
         <div className="px-6 pb-6 space-y-3">

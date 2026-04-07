@@ -30,12 +30,12 @@ function fmtDuration(mins: number): string {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
-/** Generate 30-min start-time slots using DB open_hour/close_hour (e.g. "9:00am", "9:30am"). */
-function generatePartnerSlots(venue: { open_hour?: number | null; close_hour?: number | null }): string[] {
+/** Generate start-time slots using the given step (minutes). Defaults to 30-min intervals. */
+function generatePartnerSlots(venue: { open_hour?: number | null; close_hour?: number | null }, stepMinutes = 30): string[] {
   const open = venue.open_hour ?? 9;
   const close = venue.close_hour ?? 22;
   const slots: string[] = [];
-  for (let m = open * 60; m < close * 60; m += 30) {
+  for (let m = open * 60; m < close * 60; m += stepMinutes) {
     const h = Math.floor(m / 60);
     const min = m % 60;
     const h12 = h % 12 === 0 ? 12 : h % 12;
@@ -411,8 +411,14 @@ export default function SocialPage() {
     setExpandedVenueId((prev) => (prev === venueId ? null : venueId));
   };
 
+  const [authReason, setAuthReason] = useState("");
+
   const handleSlotClick = (venue: Venue, date: Date, slot: string) => {
-    if (!user) { setAuthOpen(true); return; }
+    if (!user) {
+      setAuthReason(`Sign in to post your availability at ${venue.name} and connect with other players looking for a game.`);
+      setAuthOpen(true);
+      return;
+    }
     const existing = getSession(venue.id, date, slot);
     if (existing) {
       if (existing.player_email === user.email) return;
@@ -919,7 +925,7 @@ export default function SocialPage() {
                         {/* Slot grid for selected date */}
                         {(() => {
                           const dayRequests = requests.filter((r) => r.venue_id === venue.id && r.date === formatDate(partnersDate));
-                          const slots = generatePartnerSlots(venue);
+                          const slots = generatePartnerSlots(venue, durationFilter ?? 30);
                           return (
                             <div>
                               {/* Duration filter */}
@@ -1087,7 +1093,7 @@ export default function SocialPage() {
         </DialogContent>
       </Dialog>
 
-      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} reason={authReason || undefined} />
     </div>
   );
 }
