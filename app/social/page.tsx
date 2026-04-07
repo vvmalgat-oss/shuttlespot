@@ -14,18 +14,33 @@ import { useUserLocation } from "../hooks/useUserLocation";
 import type { User } from "@supabase/supabase-js";
 
 type Venue = { id: number; name: string; suburb: string; city: string; state: string; lat: number; lng: number; open_hour?: number | null; close_hour?: number | null; google_rating?: number | null; google_review_count?: number | null };
-type PlayRequest = { id: number; venue_id: number; venue_name: string; date: string; time_slot: string; player_name: string; player_email: string; skill_level: string; spots_available: number; message: string; status: string; created_at: string };
+type PlayRequest = { id: number; venue_id: number; venue_name: string; date: string; time_slot: string; duration_minutes: number; player_name: string; player_email: string; skill_level: string; spots_available: number; message: string; status: string; created_at: string };
 type VenueEvent = { id: number; venue_name: string; venue_suburb: string; venue_state: string; title: string; description: string; day_of_week: string; time_slot: string; frequency: string; price: string | null; skill_level: string; booking_url: string | null; source_url: string | null };
 
-/** Generate 1-hour start-time slots using DB open_hour/close_hour (e.g. "9:00am", "10:00am"). */
+const DURATION_OPTIONS = [
+  { value: 30,  label: "30 min" },
+  { value: 60,  label: "1 hr" },
+  { value: 90,  label: "1.5 hr" },
+  { value: 120, label: "2 hr" },
+];
+
+function fmtDuration(mins: number): string {
+  if (mins < 60) return `${mins} min`;
+  if (mins % 60 === 0) return `${mins / 60} hr`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+/** Generate 30-min start-time slots using DB open_hour/close_hour (e.g. "9:00am", "9:30am"). */
 function generatePartnerSlots(venue: { open_hour?: number | null; close_hour?: number | null }): string[] {
   const open = venue.open_hour ?? 9;
   const close = venue.close_hour ?? 22;
   const slots: string[] = [];
-  for (let h = open; h < close; h++) {
+  for (let m = open * 60; m < close * 60; m += 30) {
+    const h = Math.floor(m / 60);
+    const min = m % 60;
     const h12 = h % 12 === 0 ? 12 : h % 12;
     const ampm = h < 12 ? "am" : "pm";
-    slots.push(`${h12}:00${ampm}`);
+    slots.push(`${h12}:${min.toString().padStart(2, "0")}${ampm}`);
   }
   return slots;
 }
@@ -133,7 +148,8 @@ export default function SocialPage() {
   const [expandedVenueId, setExpandedVenueId] = useState<number | null>(null);
   const [showPostModal, setShowPostModal] = useState(false);
   const [pendingSlot, setPendingSlot] = useState<{ venue: Venue; date: Date; timeSlot: string } | null>(null);
-  const [formData, setFormData] = useState({ name: "", skill: "Intermediate", message: "" });
+  const [formData, setFormData] = useState({ name: "", skill: "Intermediate", message: "", duration: 60 });
+  const [durationFilter, setDurationFilter] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [search, setSearch] = useState("");
@@ -424,6 +440,7 @@ export default function SocialPage() {
     const { error, data } = await supabase.from("play_requests").insert({
       venue_id: pendingSlot.venue.id, venue_name: pendingSlot.venue.name,
       date: formatDate(pendingSlot.date), time_slot: pendingSlot.timeSlot,
+      duration_minutes: formData.duration,
       player_name: formData.name, player_email: user.email,
       skill_level: formData.skill, message: formData.message,
       spots_available: 1, status: "open",
@@ -432,7 +449,7 @@ export default function SocialPage() {
     setSubmitting(false);
     setShowPostModal(false);
     setPendingSlot(null);
-    setFormData((f) => ({ ...f, message: "" }));
+    setFormData((f) => ({ ...f, message: "", duration: 60 }));
   };
 
   return (
@@ -905,6 +922,21 @@ export default function SocialPage() {
                           const slots = generatePartnerSlots(venue);
                           return (
                             <div>
+                              {/* Duration filter */}
+                              <div className="mb-3 flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Duration</span>
+                                <button
+                                  onClick={() => setDurationFilter(null)}
+                                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition ${durationFilter === null ? "bg-primary text-primary-foreground" : "border bg-background text-foreground hover:bg-accent"}`}
+                                >Any</button>
+                                {DURATION_OPTIONS.map((opt) => (
+                                  <button
+                                    key={opt.value}
+                                    onClick={() => setDurationFilter(durationFilter === opt.value ? null : opt.value)}
+                                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition ${durationFilter === opt.value ? "bg-primary text-primary-foreground" : "border bg-background text-foreground hover:bg-accent"}`}
+                                  >{opt.label}</button>
+                                ))}
+                              </div>
                               {dayRequests.length > 0 && (
                                 <p className="mb-2 text-[10px] font-semibold text-emerald-700">
                                   {dayRequests.length} player{dayRequests.length !== 1 ? "s" : ""} looking to play
@@ -915,6 +947,8 @@ export default function SocialPage() {
                                   const session = getSession(venue.id, partnersDate, slot);
                                   const hasPlayer = !!session;
                                   const isOwn = hasPlayer && user?.email === session.player_email;
+                                  // Hide filled slots that don't match duration filter
+                                  if (hasPlayer && durationFilter !== null && session.duration_minutes !== durationFilter) return null;
 
                                   if (isOwn) {
                                     return (
@@ -924,6 +958,7 @@ export default function SocialPage() {
                                         </span>
                                         <span className="truncate text-[11px] font-semibold">{session.player_name}</span>
                                         <span className="text-[10px] text-muted-foreground">{session.skill_level}</span>
+                                        <span className="text-[10px] text-primary/70">{fmtDuration(session.duration_minutes ?? 60)}</span>
                                         <button
                                           onClick={(e) => handleDelete(e, session.id)}
                                           disabled={deleting === session.id}
@@ -948,6 +983,7 @@ export default function SocialPage() {
                                         </span>
                                         <span className="truncate text-[11px] font-semibold text-foreground">{session.player_name}</span>
                                         <span className="text-[10px] text-muted-foreground">{session.skill_level}</span>
+                                        <span className="text-[10px] text-emerald-700">{fmtDuration(session.duration_minutes ?? 60)}</span>
                                         <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white">
                                           <Users className="h-2.5 w-2.5" /> Join
                                         </span>
@@ -1021,6 +1057,15 @@ export default function SocialPage() {
             <div>
               <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Email</label>
               <Input value={user?.email ?? ""} disabled className="opacity-60" />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Duration</label>
+              <div className="flex gap-2">
+                {DURATION_OPTIONS.map((opt) => (
+                  <Button key={opt.value} variant={formData.duration === opt.value ? "default" : "outline"} size="sm" className="flex-1 text-xs"
+                    onClick={() => setFormData((f) => ({ ...f, duration: opt.value }))}>{opt.label}</Button>
+                ))}
+              </div>
             </div>
             <div>
               <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Skill level</label>
