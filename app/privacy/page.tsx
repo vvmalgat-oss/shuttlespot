@@ -79,7 +79,7 @@ export default function PrivacyPage() {
             <li>Request deletion of your account and associated data</li>
             <li>Withdraw consent for Find Partners listings (your posts will be removed)</li>
           </ul>
-          <p className="mt-3">To exercise any of these rights, email <a href="mailto:hello@shuttlespot.com.au" className="text-primary underline-offset-2 hover:underline">hello@shuttlespot.com.au</a>.</p>
+          <p className="mt-3">To exercise any of these rights, email <a href="mailto:hello.shuttlespot@gmail.com" className="text-primary underline-offset-2 hover:underline">hello.shuttlespot@gmail.com</a>.</p>
         </section>
 
         <section>
@@ -94,7 +94,7 @@ export default function PrivacyPage() {
 
         <section>
           <h2 className="text-base font-bold mb-2">10. Contact</h2>
-          <p>Privacy questions or complaints: <a href="mailto:hello@shuttlespot.com.au" className="text-primary underline-offset-2 hover:underline">hello@shuttlespot.com.au</a></p>
+          <p>Privacy questions or complaints: <a href="mailto:hello.shuttlespot@gmail.com" className="text-primary underline-offset-2 hover:underline">hello.shuttlespot@gmail.com</a></p>
         </section>
 
       </div>

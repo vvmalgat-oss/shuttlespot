@@ -70,7 +70,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-base font-bold mb-2">10. Contact</h2>
-          <p>Questions about these terms? Email us at <a href="mailto:hello@shuttlespot.com.au" className="text-primary underline-offset-2 hover:underline">hello@shuttlespot.com.au</a>.</p>
+          <p>Questions about these terms? Email us at <a href="mailto:hello.shuttlespot@gmail.com" className="text-primary underline-offset-2 hover:underline">hello.shuttlespot@gmail.com</a>.</p>
         </section>
 
       </div>
