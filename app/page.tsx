@@ -152,26 +152,23 @@ export default function Home() {
       {/* ── Hero with background video ── */}
       <section className="relative flex min-h-[600px] items-center overflow-hidden px-4 pb-20 pt-28 sm:min-h-[680px] sm:pb-28 sm:pt-36">
 
-        {/* Background video — free stock badminton footage */}
+        {/* Background video — falls back to poster image if video file not present */}
         <video
           autoPlay
           muted
           loop
           playsInline
-          className="absolute inset-0 h-full w-full object-cover"
+          poster="https://images.pexels.com/photos/8796050/pexels-photo-8796050.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop"
+          className="absolute inset-0 h-full w-full object-cover object-center"
         >
-          {/*
-            Replace this URL with a local file at /public/videos/hero.mp4
-            Free badminton stock videos: https://www.pexels.com/search/videos/badminton/
-          */}
-          <source
-            src="https://cdn.coverr.co/videos/covr-2081/720p.mp4"
-            type="video/mp4"
-          />
+          {/* Download a free badminton video from https://www.pexels.com/video/teammates-playing-badminton-8053653/
+              and save it to /public/videos/hero.mp4 */}
+          <source src="/videos/hero.mp4" type="video/mp4" />
         </video>
 
-        {/* Gradient overlay — also acts as the fallback when video is unavailable */}
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-950/95 via-blue-900/85 to-primary/80" />
+        {/* Dark overlay — keeps text readable over the photo/video */}
+        <div className="absolute inset-0 bg-black/60" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20" />
         {/* Bottom fade so the section blends into page */}
         <div className="absolute bottom-0 inset-x-0 h-24 bg-gradient-to-t from-background to-transparent" />
 
