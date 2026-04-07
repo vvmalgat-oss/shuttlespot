@@ -105,7 +105,7 @@ export default function Home() {
   // Fetch all venues + rating stats once
   useEffect(() => {
     Promise.all([
-      supabase.from("venues").select("id, name, city, state, courts, price, lat, lng, booking_url, open_hour, close_hour, google_rating, google_review_count"),
+      supabase.from("venues").select("id, name, city, state, courts, price, lat, lng, booking_url, open_hour, close_hour, open_hour_weekend, close_hour_weekend, min_duration, peak_start_hour, peak_end_hour, late_night_hour, late_night_price, opening_hours, google_rating, google_review_count"),
       supabase.from("venue_rating_stats").select("venue_id, avg_rating, review_count"),
     ]).then(([{ data, error }, { data: statsData }]) => {
       if (error) console.error("Venues fetch error:", error);

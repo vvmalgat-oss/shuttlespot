@@ -24,7 +24,7 @@ WHERE NOT EXISTS (
 -- Source: alphabadminton.com.au | 13 courts | 47/2 Slough Avenue, Silverwater NSW 2128
 INSERT INTO venues (name, suburb, city, state, address, courts, price, booking_url, lat, lng)
 SELECT 'Alpha Badminton Centre', 'Silverwater', 'Sydney', 'NSW',
-       '47/2 Slough Avenue, Silverwater NSW 2128', 13, NULL,
+       '47/2 Slough Avenue, Silverwater NSW 2128', 13, '$29/hr',
        'https://alphabadminton.yepbooking.com.au/', -33.8421, 151.0350
 WHERE NOT EXISTS (
   SELECT 1 FROM venues WHERE name = 'Alpha Badminton Centre'

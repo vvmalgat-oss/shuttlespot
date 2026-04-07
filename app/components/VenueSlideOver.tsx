@@ -29,6 +29,13 @@ type Venue = {
   opening_hours?: string | null;
   open_hour?: number | null;
   close_hour?: number | null;
+  open_hour_weekend?: number | null;
+  close_hour_weekend?: number | null;
+  min_duration?: number | null;
+  peak_start_hour?: number | null;
+  peak_end_hour?: number | null;
+  late_night_hour?: number | null;
+  late_night_price?: number | null;
 };
 
 type Props = {
@@ -61,9 +68,12 @@ function getDayOfWeek(dateStr: string) {
   return new Date(y, mo - 1, d).getDay();
 }
 
-function parseHourlyRate(price: string): number | null {
-  const m = price?.match(/\$?(\d+(?:\.\d+)?)/);
-  return m ? parseFloat(m[1]) : null;
+function parseHourlyRate(price: string): { off: number; peak: number } | null {
+  const m = price?.match(/\$?(\d+(?:\.\d+)?)(?:[^\d]+\$?(\d+(?:\.\d+)?))?/);
+  if (!m) return null;
+  const low = parseFloat(m[1]);
+  const high = m[2] ? parseFloat(m[2]) : low;
+  return { off: low, peak: high };
 }
 
 /** Convert a slot string like "7:30am" → hour as a 24h number (7.5) */
@@ -82,12 +92,17 @@ const DEFAULT_CLOSE_H = 22;
 
 /**
  * Generate start-time slots within a venue's opening hours, stepping by durationMinutes.
- * Uses DB open_hour/close_hour when available, falls back to defaults.
+ * Uses weekday/weekend-specific hours when available, falls back to defaults.
  */
-function generateSlots(durationMinutes: number, venue: { name: string; open_hour?: number | null; close_hour?: number | null }): string[] {
-  const open = venue.open_hour ?? DEFAULT_OPEN_H;
-  const close = venue.close_hour ?? DEFAULT_CLOSE_H;
-  const startH = Math.max(open, 8); // never earlier than 8am
+function generateSlots(durationMinutes: number, dayOfWeek: number, venue: { name: string; open_hour?: number | null; close_hour?: number | null; open_hour_weekend?: number | null; close_hour_weekend?: number | null }): string[] {
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  const open = isWeekend
+    ? (venue.open_hour_weekend ?? venue.open_hour ?? DEFAULT_OPEN_H)
+    : (venue.open_hour ?? DEFAULT_OPEN_H);
+  const close = isWeekend
+    ? (venue.close_hour_weekend ?? venue.close_hour ?? DEFAULT_CLOSE_H)
+    : (venue.close_hour ?? DEFAULT_CLOSE_H);
+  const startH = Math.max(open, 6); // never earlier than 6am
   const slots: string[] = [];
   const startMin = startH * 60;
   const endMin = close * 60;
@@ -102,12 +117,13 @@ function generateSlots(durationMinutes: number, venue: { name: string; open_hour
   return slots;
 }
 
-function isPeakSlot(slot: string, dayOfWeek: number): boolean {
+/** peakStartH/peakEndH default to 17 (5pm) / 22 (10pm) when not set on the venue */
+function isPeakSlot(slot: string, dayOfWeek: number, peakStartH = 17, peakEndH = 22): boolean {
   const h = slotToHour(slot);
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-  // Peak: weekend mornings 9–12, all evenings 5–9pm (no pre-8am peak since we don't show those)
-  if (isWeekend) return (h >= 9 && h < 12) || (h >= 17 && h < 21);
-  return h >= 17 && h < 21;
+  // Weekends: everything before peakEndH is peak (late-night after peakEndH handled separately)
+  if (isWeekend) return h < peakEndH;
+  return h >= peakStartH && h < peakEndH;
 }
 
 const DURATION_OPTIONS = [
@@ -124,12 +140,16 @@ function TimeSlotGrid({
   slots,
   selected,
   dayOfWeek,
+  peakStartH,
+  peakEndH,
   onSelect,
 }: {
   title: string;
   slots: string[];
   selected: string | null;
   dayOfWeek: number;
+  peakStartH: number;
+  peakEndH: number;
   onSelect: (s: string) => void;
 }) {
   if (slots.length === 0) return null;
@@ -141,7 +161,7 @@ function TimeSlotGrid({
       <div className="grid grid-cols-3 gap-1.5">
         {slots.map((slot) => {
           const active = selected === slot;
-          const peak = isPeakSlot(slot, dayOfWeek);
+          const peak = isPeakSlot(slot, dayOfWeek, peakStartH, peakEndH);
           return (
             <button
               key={slot}
@@ -177,7 +197,11 @@ export default function VenueSlideOver({ venue, open, onClose }: Props) {
   const [selectedDate, setSelectedDate] = useState(today);
   const [customDate, setCustomDate] = useState("");
   const customDateInputRef = useRef<HTMLInputElement>(null);
-  const [duration, setDuration] = useState(60);
+  const fixedDuration = venue?.min_duration ?? null;
+  const availableDurations = fixedDuration
+    ? DURATION_OPTIONS.filter(d => d.value === fixedDuration)
+    : DURATION_OPTIONS;
+  const [duration, setDuration] = useState(() => fixedDuration ?? 60);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
   const activePill =
@@ -203,18 +227,29 @@ export default function VenueSlideOver({ venue, open, onClose }: Props) {
   const dayOfWeek = useMemo(() => getDayOfWeek(selectedDate), [selectedDate]);
 
   // Re-generate slots whenever duration or venue changes
-  const allSlots = useMemo(() => generateSlots(duration, venue ?? { name: "" }), [duration, venue]);
-  const morningSlots = useMemo(() => allSlots.filter(s => { const h = slotToHour(s); return h >= 8 && h < 12; }), [allSlots]);
+  const allSlots = useMemo(() => generateSlots(duration, dayOfWeek, venue ?? { name: "" }), [duration, dayOfWeek, venue]);
+  const morningSlots = useMemo(() => allSlots.filter(s => { const h = slotToHour(s); return h >= 6 && h < 12; }), [allSlots]);
   const afternoonSlots = useMemo(() => allSlots.filter(s => { const h = slotToHour(s); return h >= 12 && h < 18; }), [allSlots]);
   const eveningSlots = useMemo(() => allSlots.filter(s => { const h = slotToHour(s); return h >= 18; }), [allSlots]);
 
   const bookingUrl = venue?.booking_url || null;
   const hasBooking = !!bookingUrl;
-  const hourlyRate = useMemo(() => parseHourlyRate(venue?.price ?? ""), [venue?.price]);
-  const estimatedCost = useMemo(
-    () => (hourlyRate ? Math.round(hourlyRate * duration / 60) : null),
-    [hourlyRate, duration]
-  );
+  const rates = useMemo(() => parseHourlyRate(venue?.price ?? ""), [venue?.price]);
+  const peakStartH = venue?.peak_start_hour ?? 17;
+  const peakEndH = venue?.peak_end_hour ?? 22;
+  const estimatedCost = useMemo(() => {
+    if (!rates) return null;
+    if (selectedTime) {
+      const h = slotToHour(selectedTime);
+      // Late-night rate takes priority if configured and slot falls within it
+      if (venue?.late_night_hour != null && venue?.late_night_price != null && h >= venue.late_night_hour) {
+        return Math.round(venue.late_night_price * duration / 60);
+      }
+    }
+    const isPeak = selectedTime ? isPeakSlot(selectedTime, dayOfWeek, peakStartH, peakEndH) : false;
+    const rate = isPeak ? rates.peak : rates.off;
+    return Math.round(rate * duration / 60);
+  }, [rates, selectedTime, dayOfWeek, duration, venue, peakStartH, peakEndH]);
 
   const continueHref = useMemo(() => {
     if (!bookingUrl || !selectedTime) return null;
@@ -377,7 +412,7 @@ export default function VenueSlideOver({ venue, open, onClose }: Props) {
                     <div>
                       <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">2 · Duration</p>
                       <div className="flex gap-2">
-                        {DURATION_OPTIONS.map(({ value, label }) => (
+                        {availableDurations.map(({ value, label }) => (
                           <button
                             key={value}
                             onClick={() => handleDuration(value)}
@@ -412,9 +447,9 @@ export default function VenueSlideOver({ venue, open, onClose }: Props) {
                       </div>
 
                       <div className="space-y-5">
-                        <TimeSlotGrid title="Morning · 8am – 12pm" slots={morningSlots} selected={selectedTime} dayOfWeek={dayOfWeek} onSelect={setSelectedTime} />
-                        <TimeSlotGrid title="Afternoon · 12pm – 6pm" slots={afternoonSlots} selected={selectedTime} dayOfWeek={dayOfWeek} onSelect={setSelectedTime} />
-                        <TimeSlotGrid title="Evening · 6pm – midnight" slots={eveningSlots} selected={selectedTime} dayOfWeek={dayOfWeek} onSelect={setSelectedTime} />
+                        <TimeSlotGrid title="Morning · 6am – 12pm" slots={morningSlots} selected={selectedTime} dayOfWeek={dayOfWeek} peakStartH={peakStartH} peakEndH={peakEndH} onSelect={setSelectedTime} />
+                        <TimeSlotGrid title="Afternoon · 12pm – 6pm" slots={afternoonSlots} selected={selectedTime} dayOfWeek={dayOfWeek} peakStartH={peakStartH} peakEndH={peakEndH} onSelect={setSelectedTime} />
+                        <TimeSlotGrid title="Evening · 6pm – midnight" slots={eveningSlots} selected={selectedTime} dayOfWeek={dayOfWeek} peakStartH={peakStartH} peakEndH={peakEndH} onSelect={setSelectedTime} />
                       </div>
                     </div>
 

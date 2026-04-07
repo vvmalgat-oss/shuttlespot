@@ -102,7 +102,7 @@ export default async function CityVenuesPage({ params }: Props) {
 
   const { data: venues } = await supabase
     .from("venues")
-    .select("id, name, suburb, address, city, state, courts, price, booking_url, photo_url, open_hour, close_hour, opening_hours, google_rating, google_review_count")
+    .select("id, name, suburb, address, city, state, courts, price, booking_url, photo_url, open_hour, close_hour, open_hour_weekend, close_hour_weekend, min_duration, peak_start_hour, peak_end_hour, late_night_hour, late_night_price, opening_hours, google_rating, google_review_count")
     .eq("state", cfg.state)
     .order("name");
 
