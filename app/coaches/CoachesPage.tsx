@@ -194,26 +194,30 @@ function CoachCard({ coach, isOwn, onEnquire, onEdit, onDelete, onViewMessages }
         </div>
       </div>
 
-      {coach.bio && (
-        <p className="px-5 text-xs leading-relaxed text-muted-foreground line-clamp-2">{coach.bio}</p>
-      )}
-      {coach.specialties?.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5 px-5">
-          {coach.specialties.slice(0, 4).map(s => (
-            <span key={s} className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground/70">{s}</span>
-          ))}
-          {coach.specialties.length > 4 && (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">+{coach.specialties.length - 4}</span>
+      {(coach.bio || coach.specialties?.length > 0 || coach.session_types?.length > 0) && (
+        <div className="flex flex-col gap-2.5 px-5 pb-4">
+          {coach.bio && (
+            <p className="text-xs leading-relaxed text-muted-foreground line-clamp-2">{coach.bio}</p>
           )}
-        </div>
-      )}
-      {coach.session_types?.length > 0 && (
-        <div className="mt-2.5 mb-4 flex flex-wrap gap-1.5 px-5">
-          {coach.session_types.map(t => (
-            <span key={t} className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-              {SESSION_ICONS[t]} {t}
-            </span>
-          ))}
+          {coach.specialties?.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {coach.specialties.slice(0, 4).map(s => (
+                <span key={s} className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground/70">{s}</span>
+              ))}
+              {coach.specialties.length > 4 && (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">+{coach.specialties.length - 4}</span>
+              )}
+            </div>
+          )}
+          {coach.session_types?.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {coach.session_types.map(t => (
+                <span key={t} className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  {SESSION_ICONS[t]} {t}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
