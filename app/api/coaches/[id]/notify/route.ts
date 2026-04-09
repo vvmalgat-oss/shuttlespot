@@ -19,13 +19,17 @@ const SELF_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://shuttlespot.vercel.
  */
 async function logoDataUri(): Promise<string | null> {
   try {
+    console.log(`[notify] Fetching logo from ${SELF_URL}/api/email-logo`);
     const res = await fetch(`${SELF_URL}/api/email-logo`, {
       signal: AbortSignal.timeout(4000),
     });
+    console.log(`[notify] Logo fetch status: ${res.status}`);
     if (!res.ok) return null;
     const buf = await res.arrayBuffer();
+    console.log(`[notify] Logo fetched, size: ${buf.byteLength} bytes`);
     return `data:image/png;base64,${Buffer.from(buf).toString("base64")}`;
-  } catch {
+  } catch (e) {
+    console.error(`[notify] Logo fetch failed:`, e);
     return null;
   }
 }
