@@ -9,30 +9,7 @@ const SVC  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM   = process.env.RESEND_FROM_EMAIL ?? "ShuttleSpot <notifications@shuttlespot.com.au>";
 
-// In dev, fetch from localhost. In prod, use the deployed domain.
-const SELF_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://shuttlespot.vercel.app";
-
-/**
- * Fetch the logo PNG from our own /api/email-logo endpoint and return it
- * as a base64 data URI so it is embedded directly in the email HTML.
- * Gmail and every other client renders data URIs reliably — no external fetch needed.
- */
-async function logoDataUri(): Promise<string | null> {
-  try {
-    console.log(`[notify] Fetching logo from ${SELF_URL}/api/email-logo`);
-    const res = await fetch(`${SELF_URL}/api/email-logo`, {
-      signal: AbortSignal.timeout(4000),
-    });
-    console.log(`[notify] Logo fetch status: ${res.status}`);
-    if (!res.ok) return null;
-    const buf = await res.arrayBuffer();
-    console.log(`[notify] Logo fetched, size: ${buf.byteLength} bytes`);
-    return `data:image/png;base64,${Buffer.from(buf).toString("base64")}`;
-  } catch (e) {
-    console.error(`[notify] Logo fetch failed:`, e);
-    return null;
-  }
-}
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://shuttlespot.vercel.app";
 
 export async function POST(
   req: NextRequest,
@@ -65,13 +42,8 @@ export async function POST(
   const playerName = body.playerName ?? user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? "A player";
   const preview    = body.message ? `"${body.message.slice(0, 120)}${body.message.length > 120 ? "…" : ""}"` : "";
 
-  // Fetch logo as base64 — embedded directly so no external image request needed
-  const logo = await logoDataUri();
-  const logoHtml = logo
-    ? `<img src="${logo}" alt="ShuttleSpot" width="160" height="44" style="display:block;border:0;" />`
-    : `<span style="font-size:16px;font-weight:700;font-family:-apple-system,sans-serif;color:#0f172a;">Shuttle<span style="color:#2563eb;">Spot</span></span>`;
-
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://shuttlespot.vercel.app";
+  // Use external HTTPS URL — Gmail blocks data: URIs and inline SVG
+  const logoHtml = `<img src="${APP_URL}/api/email-logo" alt="ShuttleSpot" width="160" height="44" style="display:block;border:0;" />`;
 
   try {
     await resend.emails.send({
@@ -100,7 +72,7 @@ export async function POST(
           <div style="background:#f1f5f9;border-radius:8px;padding:14px 16px;margin-bottom:20px">
             <p style="margin:0;font-size:13px;color:#334155;line-height:1.6">${preview}</p>
           </div>` : ""}
-          <a href="${appUrl}/coaches"
+          <a href="${APP_URL}/coaches"
              style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;font-size:14px;font-weight:600;border-radius:8px;text-decoration:none">
             View &amp; reply in ShuttleSpot →
           </a>
