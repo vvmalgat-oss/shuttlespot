@@ -86,17 +86,22 @@ export default function VenuesPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data, error }, { data: statsData }] = await Promise.all([
-        supabase.from("venues").select("*").order("name"),
-        supabase.from("venue_rating_stats").select("venue_id, avg_rating, review_count"),
-      ]);
-      if (!error) setVenues((data as Venue[]) || []);
-      if (statsData) {
-        const map: Record<number, RatingStats> = {};
-        statsData.forEach((s: RatingStats & { venue_id: number }) => { map[s.venue_id] = s; });
-        setRatingStatsMap(map);
+      try {
+        const [{ data, error }, { data: statsData }] = await Promise.all([
+          supabase.from("venues").select("*").order("name"),
+          supabase.from("venue_rating_stats").select("venue_id, avg_rating, review_count"),
+        ]);
+        if (!error) setVenues((data as Venue[]) || []);
+        if (statsData) {
+          const map: Record<number, RatingStats> = {};
+          statsData.forEach((s: RatingStats & { venue_id: number }) => { map[s.venue_id] = s; });
+          setRatingStatsMap(map);
+        }
+      } catch (err) {
+        console.error("Failed to load venues:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     load();
   }, []);

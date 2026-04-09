@@ -115,7 +115,7 @@ export default function Home() {
         statsData.forEach((s: RatingStats & { venue_id: number }) => { map[s.venue_id] = s; });
         setRatingStatsMap(map);
       }
-    });
+    }).catch(err => console.error("Failed to load venues:", err));
   }, []);
 
   // Sort venues by distance when location is available, else by Google rating / courts

@@ -18,6 +18,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: "https://shuttlespot.vercel.app/social", lastModified: now, changeFrequency: "daily", priority: 0.8 },
     { url: "https://shuttlespot.vercel.app/coaches", lastModified: now, changeFrequency: "daily", priority: 0.85 },
     { url: "https://shuttlespot.vercel.app/search", lastModified: now, changeFrequency: "weekly", priority: 0.6 },
+    { url: "https://shuttlespot.vercel.app/saved", lastModified: now, changeFrequency: "weekly", priority: 0.5 },
     ...["melbourne", "sydney", "brisbane", "perth", "adelaide", "canberra", "hobart", "darwin"].map((city) => ({
       url: `https://shuttlespot.vercel.app/venues/${city}`,
       lastModified: now,
