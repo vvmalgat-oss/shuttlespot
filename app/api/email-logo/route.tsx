@@ -3,6 +3,12 @@ import { ImageResponse } from "next/og";
 export const runtime = "edge";
 
 export async function GET() {
+  // Load Inter ExtraBold (800) from Google Fonts so the wordmark renders bold
+  const fontRes = await fetch(
+    "https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuFuYAZJh.woff2"
+  );
+  const fontData = await fontRes.arrayBuffer();
+
   return new ImageResponse(
     (
       <div
@@ -31,15 +37,26 @@ export async function GET() {
           </svg>
         </div>
         <div style={{ display: "flex" }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-1px" }}>
+          <span style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-1px", fontFamily: "Inter" }}>
             Shuttle
           </span>
-          <span style={{ fontSize: 22, fontWeight: 800, color: "#2563eb", letterSpacing: "-1px" }}>
+          <span style={{ fontSize: 22, fontWeight: 800, color: "#2563eb", letterSpacing: "-1px", fontFamily: "Inter" }}>
             Spot
           </span>
         </div>
       </div>
     ),
-    { width: 160, height: 44 }
+    {
+      width: 160,
+      height: 44,
+      fonts: [
+        {
+          name: "Inter",
+          data: fontData,
+          weight: 800,
+          style: "normal",
+        },
+      ],
+    }
   );
 }
