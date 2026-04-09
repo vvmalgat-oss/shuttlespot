@@ -1,7 +1,7 @@
 import urllib.request, urllib.parse, json, time
 
-KEY = "AIzaSyBIStEGU6ASiYX99wWGRUvnwDKRf9tTNvA"
-KEY_SVC = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFwZGN5enB3bWV0aW5oYWNwZW52Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mjc4MTI2MiwiZXhwIjoyMDg4MzU3MjYyfQ.KxS0Uu92y4nWkZvh5QsHlBT_ttY9LzfZwamQXwDhgXg"
+KEY = "YOUR_GOOGLE_MAPS_API_KEY"
+KEY_SVC = "YOUR_SUPABASE_SERVICE_ROLE_KEY"
 BASE = "https://apdcyzpwmetinhacpenv.supabase.co/rest/v1/venues"
 
 venues = [
