@@ -31,10 +31,10 @@ export async function GET() {
           </svg>
         </div>
         <div style={{ display: "flex" }}>
-          <span style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", letterSpacing: "-0.5px" }}>
+          <span style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-1px" }}>
             Shuttle
           </span>
-          <span style={{ fontSize: 20, fontWeight: 700, color: "#2563eb", letterSpacing: "-0.5px" }}>
+          <span style={{ fontSize: 22, fontWeight: 800, color: "#2563eb", letterSpacing: "-1px" }}>
             Spot
           </span>
         </div>

@@ -10,9 +10,7 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 const FROM   = process.env.RESEND_FROM_EMAIL ?? "ShuttleSpot <notifications@shuttlespot.com.au>";
 
 // In dev, fetch from localhost. In prod, use the deployed domain.
-const SELF_URL =
-  process.env.NEXT_PUBLIC_APP_URL ??
-  (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://shuttlespot.vercel.app");
+const SELF_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://shuttlespot.vercel.app";
 
 /**
  * Fetch the logo PNG from our own /api/email-logo endpoint and return it
