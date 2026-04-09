@@ -3,11 +3,20 @@ import { ImageResponse } from "next/og";
 export const runtime = "edge";
 
 export async function GET() {
-  // Load Inter ExtraBold (800) from Google Fonts so the wordmark renders bold
-  const fontRes = await fetch(
-    "https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuFuYAZJh.woff2"
-  );
-  const fontData = await fontRes.arrayBuffer();
+  let fonts: ConstructorParameters<typeof ImageResponse>[1]["fonts"] = [];
+
+  try {
+    const fontRes = await fetch(
+      "https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuFuYAZJh.woff2",
+      { signal: AbortSignal.timeout(3000) }
+    );
+    if (fontRes.ok) {
+      const fontData = await fontRes.arrayBuffer();
+      fonts = [{ name: "Inter", data: fontData, weight: 800, style: "normal" }];
+    }
+  } catch {
+    // fall back to default font
+  }
 
   return new ImageResponse(
     (
@@ -37,26 +46,15 @@ export async function GET() {
           </svg>
         </div>
         <div style={{ display: "flex" }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-1px", fontFamily: "Inter" }}>
+          <span style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-1px", fontFamily: fonts.length ? "Inter" : "sans-serif" }}>
             Shuttle
           </span>
-          <span style={{ fontSize: 22, fontWeight: 800, color: "#2563eb", letterSpacing: "-1px", fontFamily: "Inter" }}>
+          <span style={{ fontSize: 22, fontWeight: 800, color: "#2563eb", letterSpacing: "-1px", fontFamily: fonts.length ? "Inter" : "sans-serif" }}>
             Spot
           </span>
         </div>
       </div>
     ),
-    {
-      width: 160,
-      height: 44,
-      fonts: [
-        {
-          name: "Inter",
-          data: fontData,
-          weight: 800,
-          style: "normal",
-        },
-      ],
-    }
+    { width: 160, height: 44, fonts }
   );
 }
