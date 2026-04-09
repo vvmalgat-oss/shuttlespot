@@ -10,6 +10,7 @@ import { Search, MapPin, Navigation, X } from "lucide-react";
 
 // Must be defined outside the component to avoid "LoadScript reloaded" warnings.
 // Must match the libraries array in VenueMap.tsx.
+// Uses Google Places AutocompleteService with country:"au" restriction — not a hardcoded list.
 const LIBRARIES: ("places")[] = ["places"];
 
 type Prediction = {

@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, Menu, X, LogOut, User, Heart } from "lucide-react";
+import { Search, Menu, X, LogOut, Heart, Award } from "lucide-react";
 import SearchModal from "./SearchModal";
 import AuthModal from "./AuthModal";
 import ShuttleSpotLogo from "./ShuttlecockLogo";
@@ -26,12 +26,28 @@ export default function Navbar() {
   const [authOpen, setAuthOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [isCoach, setIsCoach] = useState(false);
   const { location: userLocation } = useUserLocation();
 
+  const checkCoachStatus = async (u: SupabaseUser | null) => {
+    if (!u?.email) { setIsCoach(false); return; }
+    const { data } = await supabase
+      .from("coaches")
+      .select("id")
+      .eq("email", u.email)
+      .eq("active", true)
+      .maybeSingle();
+    setIsCoach(!!data);
+  };
+
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+      checkCoachStatus(data.user);
+    });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      checkCoachStatus(session?.user ?? null);
     });
     return () => listener.subscription.unsubscribe();
   }, []);
@@ -54,6 +70,7 @@ export default function Navbar() {
     { href: "/", label: "Find Courts" },
     { href: "/venues", label: "Venues" },
     { href: "/social", label: "Social" },
+    { href: "/coaches", label: "Coaches" },
   ];
 
   return (
@@ -100,6 +117,11 @@ export default function Navbar() {
                   <div className="px-2 py-1.5">
                     <p className="text-xs font-medium truncate">{user.user_metadata?.full_name || "Account"}</p>
                     <p className="text-[11px] text-muted-foreground truncate">{user.email}</p>
+                    {isCoach && (
+                      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                        <Award className="h-2.5 w-2.5" /> Coach
+                      </span>
+                    )}
                   </div>
                   <DropdownMenuSeparator />
                   <Link href="/saved">
@@ -135,6 +157,11 @@ export default function Navbar() {
                 <div className="px-2 py-1.5 mb-2">
                   <p className="text-xs font-medium truncate">{user.user_metadata?.full_name || "Account"}</p>
                   <p className="text-[11px] text-muted-foreground truncate">{user.email}</p>
+                  {isCoach && (
+                    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                      <Award className="h-2.5 w-2.5" /> Coach
+                    </span>
+                  )}
                 </div>
                 <Link href="/saved" onClick={() => setMobileOpen(false)}>
                   <Button variant="ghost" className="w-full justify-start gap-2 text-[13px]">

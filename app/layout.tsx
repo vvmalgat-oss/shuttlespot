@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "./components/Navbar";
 import BottomNav from "./components/BottomNav";
+import { Analytics } from "@vercel/analytics/react";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://shuttlespot.vercel.app"),
@@ -21,6 +22,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "ShuttleSpot — Find Badminton Courts Across Australia",
     description: "Discover and book badminton courts across Australia. Search by suburb, compare prices, and find playing partners.",
+    images: ["/opengraph-image"],
   },
 };
 
@@ -31,6 +33,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <Navbar />
         {children}
         <BottomNav />
+        <Analytics />
         <footer className="border-t bg-muted/30 px-4 py-8 pb-24 sm:px-6 md:pb-8">
           <div className="mx-auto max-w-6xl">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -38,6 +41,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <nav className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
                 <a href="/venues" className="hover:text-foreground transition">All venues</a>
                 <a href="/social" className="hover:text-foreground transition">Find partners</a>
+                <a href="/coaches" className="hover:text-foreground transition">Coaches</a>
                 <a href="/terms" className="hover:text-foreground transition">Terms</a>
                 <a href="/privacy" className="hover:text-foreground transition">Privacy</a>
                 <a href="mailto:hello.shuttlespot@gmail.com" className="hover:text-foreground transition">Contact</a>

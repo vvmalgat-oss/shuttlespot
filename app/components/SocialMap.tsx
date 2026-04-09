@@ -30,28 +30,33 @@ type Props = {
 
 const AU_CENTER = { lat: -27.0, lng: 133.0 };
 
-// Build an SVG data-URI icon for MarkerF — no OverlayView needed
+// Build an SVG data-URI shuttlecock icon for MarkerF.
+// Five feather shafts radiate from the tip + two horizontal cross-section rings.
+// Count badge is shown inside the top feather ring.
 function makeIconUrl(count: number, selected: boolean, hasSessions: boolean): string {
   const fill = selected ? "#2563eb" : hasSessions ? "#16a34a" : "#94a3b8";
-  const w = selected ? 52 : 42;
-  const h = selected ? 64 : 52;
-  const cx = w / 2;
-  // pin path scaled to viewBox
-  const vbW = 52;
-  const vbH = 64;
+  const ringFill = selected
+    ? "rgba(219,234,254,0.96)"
+    : hasSessions
+    ? "rgba(220,252,231,0.96)"
+    : "rgba(248,250,252,0.96)";
   const label = hasSessions ? (count > 9 ? "9+" : String(count)) : "";
 
-  const svg = `
-<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${vbW} ${vbH}">
-  <ellipse cx="${cx}" cy="${vbH - 3}" rx="10" ry="3.5" fill="rgba(0,0,0,0.18)"/>
-  <path d="M${cx} 3C${cx - 14} 3 ${cx - 22} ${3 + 12} ${cx - 22} ${3 + 22}c0 14 22 36 22 36s22-22 22-36C${cx + 22} ${3 + 12} ${cx + 14} 3 ${cx} 3z"
-    fill="${fill}" stroke="white" stroke-width="2.5"/>
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="46" viewBox="0 0 40 46">
+  <ellipse cx="20" cy="45" rx="5" ry="1.6" fill="rgba(0,0,0,0.15)"/>
+  <line x1="20" y1="40" x2="3"  y2="11" stroke="${fill}" stroke-width="2"   stroke-linecap="round"/>
+  <line x1="20" y1="40" x2="10" y2="6"  stroke="${fill}" stroke-width="1.4" stroke-linecap="round" opacity="0.7"/>
+  <line x1="20" y1="40" x2="20" y2="4"  stroke="${fill}" stroke-width="1.4" stroke-linecap="round" opacity="0.7"/>
+  <line x1="20" y1="40" x2="30" y2="6"  stroke="${fill}" stroke-width="1.4" stroke-linecap="round" opacity="0.7"/>
+  <line x1="20" y1="40" x2="37" y2="11" stroke="${fill}" stroke-width="2"   stroke-linecap="round"/>
+  <ellipse cx="20" cy="22" rx="11" ry="3.5" fill="none" stroke="${fill}" stroke-width="1.4" opacity="0.55"/>
+  <ellipse cx="20" cy="31" rx="6"  ry="2"   fill="none" stroke="${fill}" stroke-width="1.2" opacity="0.4"/>
+  <ellipse cx="20" cy="11" rx="17" ry="5.5" fill="${ringFill}" stroke="${fill}" stroke-width="2.2"/>
   ${label
-    ? `<text x="${cx}" y="${3 + 26}" text-anchor="middle" dominant-baseline="middle"
-         font-size="15" font-weight="800" fill="white" font-family="system-ui,sans-serif">${label}</text>`
-    : `<circle cx="${cx}" cy="${3 + 22}" r="6" fill="white" opacity="0.8"/>`
+    ? `<text x="20" y="13" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="800" fill="${fill}" font-family="system-ui,sans-serif">${label}</text>`
+    : ""
   }
-</svg>`.trim();
+</svg>`;
 
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
@@ -178,9 +183,8 @@ export default function SocialMap({
           const isSelected = venue.id === selectedVenueId;
           const hasSessions = venue.sessionCount > 0;
           const iconUrl = makeIconUrl(venue.sessionCount, isSelected, hasSessions);
-          const iconSize = isSelected ? 52 : 42;
-          const iconHeight = isSelected ? 64 : 52;
-
+          const scaledW = isSelected ? 42 : 34;
+          const scaledH = isSelected ? 48 : 39;
           return (
             <MarkerF
               key={venue.id}
@@ -190,8 +194,8 @@ export default function SocialMap({
               onClick={() => onMarkerClick(venue.id)}
               icon={{
                 url: iconUrl,
-                scaledSize: new google.maps.Size(iconSize, iconHeight),
-                anchor: new google.maps.Point(iconSize / 2, iconHeight - 4),
+                scaledSize: new google.maps.Size(scaledW, scaledH),
+                anchor: new google.maps.Point(scaledW / 2, isSelected ? 46 : 37),
               }}
             />
           );
@@ -202,7 +206,7 @@ export default function SocialMap({
           <InfoWindowF
             position={{ lat: selectedVenue.lat, lng: selectedVenue.lng }}
             options={{
-              pixelOffset: new google.maps.Size(0, -(selectedVenue.id === selectedVenueId ? 64 : 52) + 4),
+              pixelOffset: new google.maps.Size(0, -64 + 4),
               disableAutoPan: true,
             }}
             onCloseClick={() => onMarkerClick(selectedVenue.id)}

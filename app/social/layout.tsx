@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "Find Playing Partners",
@@ -11,5 +12,5 @@ export const metadata: Metadata = {
 };
 
 export default function SocialLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return <Suspense>{children}</Suspense>;
 }

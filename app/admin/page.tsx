@@ -92,8 +92,13 @@ export default function AdminPage() {
     setFetchingPlace(true);
     setError("");
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Not authenticated");
       const q = encodeURIComponent(`${form.name} ${form.suburb || ""} ${form.state} Australia`);
-      const res = await fetch(`/api/places-lookup?q=${q}`);
+      const res = await fetch(`/api/places-lookup?q=${q}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       if (data.lat) set("lat", data.lat);

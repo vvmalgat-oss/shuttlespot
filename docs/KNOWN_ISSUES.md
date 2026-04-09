@@ -16,7 +16,7 @@
 - [ ] **Bulk venue data update** — Apply verified pricing + hours from manual research doc (user to provide)
 
 ### P1 — Post-Launch Polish
-- [ ] **Venue photos** — Most venues use gradient fallback; real photos would improve trust
+- [x] **Venue photos** — All 76 venues now have Google Places photo_url set
 - [ ] **More venues** — Coverage outside VIC/NSW/QLD is thin
 
 ### Lower Priority
@@ -30,7 +30,8 @@
 
 ## Already Done (previously listed as known issues)
 
-- **Suburb autocomplete** — Uses Google Places Autocomplete API with `country: "au"` restriction. Works for all Australian suburbs/cities.
+- **Suburb autocomplete** — Uses Google Places Autocomplete API with `country: "au"` restriction. Works for all Australian suburbs/cities. (FEATURES.md note about hardcoded Melbourne list is outdated — already on Places API.)
+- **Venue detail page** — Hero shows name/address overlay on both photo and gradient banners. "Find partners here" CTA links to /social filtered by venue. Nearby venues section shows 3 closest in same state. All 76 venues have photos.
 - **Mobile map toggle** — Both search and venues pages have `mobileView` state with list/map toggle button (hidden on desktop via `lg:hidden`).
 - **User authentication** — Supabase Auth with email/password. AuthModal + session persistence.
 - **SEO** — Metadata, OpenGraph, structured data (JSON-LD), and canonical URLs on all key pages. City landing pages at `/venues/[city]`.

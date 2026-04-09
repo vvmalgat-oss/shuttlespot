@@ -66,6 +66,24 @@ SET price = '$29/hr'
 WHERE name = 'Alpha Badminton Centre'
   AND suburb = 'Silverwater';
 
+-- ── VICTORIA (continued) ──────────────────────────────────────────────────────
+
+-- Mitcham Badminton:
+-- mitchambadminton.yepbooking.com.au/ defaults to showing their social sessions
+-- tab rather than regular court hire. Use the venue's main website instead —
+-- it has a prominent "Book Now" button that routes to the correct booking flow.
+UPDATE venues
+SET booking_url = 'https://www.mitchambadminton.com.au/'
+WHERE name = 'Mitcham Badminton';
+
+-- Narrandjeri Stadium (Darebin Stadiums, Thornbury):
+-- The previous URL /social-badminton/ pointed only to their social programme.
+-- Darebin Stadiums has no dedicated badminton court hire page (confirmed via
+-- their sitemap). Homepage is the appropriate link.
+UPDATE venues
+SET booking_url = 'https://darebinstadiums.com.au/'
+WHERE name = 'Narrandjeri Stadium';
+
 -- ── VERIFY (run this separately to confirm changes applied) ───────────────────
 
 SELECT name, suburb, state, booking_url
@@ -77,6 +95,8 @@ WHERE name IN (
   'Sydney Olympic Park Badminton',
   'Badminton ACT - Lyneham',
   'Badminton WA - Burswood Stadium',
-  'Alpha Badminton Centre'
+  'Alpha Badminton Centre',
+  'Mitcham Badminton',
+  'Narrandjeri Stadium'
 )
 ORDER BY state, name;

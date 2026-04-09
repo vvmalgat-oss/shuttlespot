@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, LayoutList, Users, Heart } from "lucide-react";
+import { Home, LayoutList, Users, Heart, Award } from "lucide-react";
 
 const tabs = [
   {
@@ -22,6 +22,12 @@ const tabs = [
     label: "Social",
     icon: Users,
     match: (p: string) => p.startsWith("/social"),
+  },
+  {
+    href: "/coaches",
+    label: "Coaches",
+    icon: Award,
+    match: (p: string) => p.startsWith("/coaches"),
   },
   {
     href: "/saved",

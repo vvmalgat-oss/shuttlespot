@@ -1,21 +1,23 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "../../supabase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, MapPin, Calendar, CalendarDays, Clock, ChevronDown, ChevronUp, Trash2, Search, Map, List, Radio, Navigation, ExternalLink, PartyPopper, X } from "lucide-react";
+import { Users, MapPin, Calendar, CalendarDays, Clock, ChevronDown, ChevronUp, Trash2, Search, Map, List, Radio, Navigation, ExternalLink, PartyPopper, X, MessageSquare, Send } from "lucide-react";
 import AuthModal from "../components/AuthModal";
 import SocialMap from "../components/SocialMap";
 import { useUserLocation } from "../hooks/useUserLocation";
 import type { User } from "@supabase/supabase-js";
 
 type Venue = { id: number; name: string; suburb: string; city: string; state: string; lat: number; lng: number; open_hour?: number | null; close_hour?: number | null; google_rating?: number | null; google_review_count?: number | null };
-type PlayRequest = { id: number; venue_id: number; venue_name: string; date: string; time_slot: string; duration_minutes: number; player_name: string; player_email: string; skill_level: string; spots_available: number; message: string; status: string; created_at: string };
+type PlayRequest = { id: number; venue_id: number; venue_name: string; date: string; time_slot: string; duration_minutes: number; player_name: string; player_email: string; skill_level: string; spots_available: number; message: string; status: string; created_at: string; user_id?: string | null };
 type VenueEvent = { id: number; venue_name: string; venue_suburb: string; venue_state: string; title: string; description: string; day_of_week: string; time_slot: string; frequency: string; price: string | null; skill_level: string; booking_url: string | null; source_url: string | null };
+type Message = { id: number; play_request_id: number; sender_user_id: string; sender_name: string; message: string; is_from_poster: boolean; created_at: string };
 
 const DURATION_OPTIONS = [
   { value: 30,  label: "30 min" },
@@ -102,6 +104,19 @@ function formatDateLabel(d: Date) {
 }
 function isToday(d: Date) { return d.toDateString() === new Date().toDateString(); }
 
+/** Returns true if the given slot time (e.g. "9:30am") is in the past on today's date. */
+function isSlotInPast(date: Date, slot: string): boolean {
+  if (!isToday(date)) return false;
+  const match = slot.match(/^(\d+):(\d+)(am|pm)$/i);
+  if (!match) return false;
+  let h = parseInt(match[1]);
+  const m = parseInt(match[2]);
+  if (match[3].toLowerCase() === "pm" && h !== 12) h += 12;
+  if (match[3].toLowerCase() === "am" && h === 12) h = 0;
+  const now = new Date();
+  return h * 60 + m < now.getHours() * 60 + now.getMinutes();
+}
+
 function fmtHour(h: number): string {
   if (h === 0 || h === 24) return "midnight";
   if (h === 12) return "12pm";
@@ -145,6 +160,7 @@ export default function SocialPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
+  const [authReturnTo, setAuthReturnTo] = useState<string | undefined>(undefined);
   const [expandedVenueId, setExpandedVenueId] = useState<number | null>(null);
   const [showPostModal, setShowPostModal] = useState(false);
   const [pendingSlot, setPendingSlot] = useState<{ venue: Venue; date: Date; timeSlot: string } | null>(null);
@@ -152,7 +168,8 @@ export default function SocialPage() {
   const [durationFilter, setDurationFilter] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
-  const [search, setSearch] = useState("");
+  const searchParams = useSearchParams();
+  const [search, setSearch] = useState(searchParams.get("venue") ?? "");
   const [stateFilter, setStateFilter] = useState("");
   const [activeOnly, setActiveOnly] = useState(false);
   const [nearMe, setNearMe] = useState(false);
@@ -175,19 +192,41 @@ export default function SocialPage() {
   const todayStr = formatDate(todayDate);
   const partnersActivePill = isToday(partnersDate) ? "today" : partnersDate.toDateString() === tomorrowDate.toDateString() ? "tomorrow" : "custom";
 
-  // Auth
+  // Auth — restore post modal if user just came back from sign-in
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+      // If redirected back after auth with ?post=true, auto-open the post form
+      if (data.user && searchParams.get("post") === "true") {
+        // Restore the slot they had selected before being sent to sign in
+        let slotRestored = false;
+        try {
+          const saved = sessionStorage.getItem("ss_pendingSlot");
+          if (saved) {
+            const { venue, date, timeSlot } = JSON.parse(saved);
+            setPendingSlot({ venue, date: new Date(date), timeSlot });
+            sessionStorage.removeItem("ss_pendingSlot");
+            slotRestored = true;
+          }
+        } catch {}
+        // Only open the modal if we have a slot to post — otherwise they'll just see the page
+        if (slotRestored) setShowPostModal(true);
+        // Clean the param from the URL without a full navigation
+        const url = new URL(window.location.href);
+        url.searchParams.delete("post");
+        window.history.replaceState({}, "", url.toString());
+      }
+    });
     const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => setUser(session?.user ?? null));
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [searchParams]);
 
   // Initial data load
   useEffect(() => {
     async function load() {
       const [v, r, e] = await Promise.all([
         supabase.from("venues").select("id, name, suburb, city, state, lat, lng, open_hour, close_hour, google_rating, google_review_count").order("name"),
-        supabase.from("play_requests").select("*").eq("status", "open").gte("date", new Date().toISOString().split("T")[0]).order("created_at", { ascending: false }),
+        supabase.from("play_requests").select("id, venue_id, venue_name, date, time_slot, duration_minutes, player_name, player_email, skill_level, spots_available, message, status, created_at, user_id").eq("status", "open").gte("date", new Date().toISOString().split("T")[0]).order("created_at", { ascending: false }),
         supabase.from("venue_events").select("*").eq("is_active", true).order("venue_state").order("venue_name"),
       ]);
       if (v.data) setVenues(v.data as Venue[]);
@@ -412,19 +451,68 @@ export default function SocialPage() {
   };
 
   const [authReason, setAuthReason] = useState("");
+  // In-app messaging
+  const [msgRequest, setMsgRequest] = useState<PlayRequest | null>(null);
+  const [msgIsOwner, setMsgIsOwner] = useState(false);
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [msgText, setMsgText] = useState("");
+  const [msgSending, setMsgSending] = useState(false);
+  const [msgSent, setMsgSent] = useState(false);
+  const [messages, setMessages] = useState<Record<number, Message[]>>({});
+
+  const loadMessages = async (requestId: number) => {
+    const { data } = await supabase
+      .from("play_request_messages")
+      .select("*")
+      .eq("play_request_id", requestId)
+      .order("created_at", { ascending: true });
+    if (data) setMessages((prev) => ({ ...prev, [requestId]: data as Message[] }));
+  };
+
+  const handleOpenMessages = (req: PlayRequest, isOwner: boolean) => {
+    setMsgRequest(req);
+    setMsgIsOwner(isOwner);
+    setMsgText("");
+    setMsgSent(false);
+    setMsgOpen(true);
+    loadMessages(req.id);
+  };
+
+  const handleSendMessage = async () => {
+    if (!msgRequest || !user || !msgText.trim()) return;
+    setMsgSending(true);
+    const senderName = formData.name || user.user_metadata?.full_name || user.email?.split("@")[0] || "Player";
+    const { error } = await supabase.from("play_request_messages").insert({
+      play_request_id: msgRequest.id,
+      sender_user_id: user.id,
+      sender_name: senderName,
+      message: msgText.trim(),
+      is_from_poster: msgIsOwner,
+    });
+    if (!error) {
+      setMsgSent(true);
+      setMsgText("");
+      loadMessages(msgRequest.id);
+    }
+    setMsgSending(false);
+  };
 
   const handleSlotClick = (venue: Venue, date: Date, slot: string) => {
     if (!user) {
+      // Save the slot so we can restore it after the user signs in
+      try {
+        sessionStorage.setItem("ss_pendingSlot", JSON.stringify({ venue, date: date.toISOString(), timeSlot: slot }));
+      } catch {}
       setAuthReason(`Sign in to post your availability at ${venue.name} and connect with other players looking for a game.`);
+      setAuthReturnTo("/social?post=true");
       setAuthOpen(true);
       return;
     }
     const existing = getSession(venue.id, date, slot);
     if (existing) {
-      if (existing.player_email === user.email) return;
-      const subject = encodeURIComponent(`Let's play at ${venue.name}`);
-      const body = encodeURIComponent(`Hi ${existing.player_name},\n\nI'd love to join you at ${venue.name} on ${formatDateLabel(date)} at ${slot}!`);
-      window.open(`mailto:${existing.player_email}?subject=${subject}&body=${body}`);
+      const isOwner = existing.user_id ? existing.user_id === user.id : existing.player_email === user.email;
+      if (isOwner) return;
+      handleOpenMessages(existing, false);
       return;
     }
     setPendingSlot({ venue, date, timeSlot: slot });
@@ -447,7 +535,7 @@ export default function SocialPage() {
       venue_id: pendingSlot.venue.id, venue_name: pendingSlot.venue.name,
       date: formatDate(pendingSlot.date), time_slot: pendingSlot.timeSlot,
       duration_minutes: formData.duration,
-      player_name: formData.name, player_email: user.email,
+      player_name: formData.name, player_email: user.email, user_id: user.id,
       skill_level: formData.skill, message: formData.message,
       spots_available: 1, status: "open",
     }).select();
@@ -586,7 +674,7 @@ export default function SocialPage() {
           {!user && (
             <>
               <div className="h-4 w-px shrink-0 bg-border" />
-              <button onClick={() => setAuthOpen(true)} className="shrink-0 text-[11px] text-primary hover:underline">
+              <button onClick={() => { setAuthReturnTo("/social?post=true"); setAuthOpen(true); }} className="shrink-0 text-[11px] text-primary hover:underline">
                 Sign in to post
               </button>
             </>
@@ -952,11 +1040,15 @@ export default function SocialPage() {
                                 {slots.map((slot) => {
                                   const session = getSession(venue.id, partnersDate, slot);
                                   const hasPlayer = !!session;
-                                  const isOwn = hasPlayer && user?.email === session.player_email;
+                                  const isPast = isSlotInPast(partnersDate, slot);
+                                  const isOwn = hasPlayer && (session.user_id ? session.user_id === user?.id : user?.email === session.player_email);
+                                  // Hide past empty slots — no point posting in the past
+                                  if (isPast && !hasPlayer) return null;
                                   // Hide filled slots that don't match duration filter
                                   if (hasPlayer && durationFilter !== null && session.duration_minutes !== durationFilter) return null;
 
                                   if (isOwn) {
+                                    const msgCount = messages[session.id]?.length ?? 0;
                                     return (
                                       <div key={slot} className="flex flex-col gap-1 rounded-lg border-2 border-primary bg-primary/5 px-2 py-2">
                                         <span className="flex items-center gap-1 text-[10px] font-semibold text-primary">
@@ -966,9 +1058,16 @@ export default function SocialPage() {
                                         <span className="text-[10px] text-muted-foreground">{session.skill_level}</span>
                                         <span className="text-[10px] text-primary/70">{fmtDuration(session.duration_minutes ?? 60)}</span>
                                         <button
+                                          onClick={(e) => { e.stopPropagation(); handleOpenMessages(session, true); }}
+                                          className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary transition hover:bg-primary/20"
+                                        >
+                                          <MessageSquare className="h-2.5 w-2.5" />
+                                          {msgCount > 0 ? `${msgCount} message${msgCount !== 1 ? "s" : ""}` : "Messages"}
+                                        </button>
+                                        <button
                                           onClick={(e) => handleDelete(e, session.id)}
                                           disabled={deleting === session.id}
-                                          className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold text-destructive transition hover:bg-destructive/20"
+                                          className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold text-destructive transition hover:bg-destructive/20"
                                         >
                                           <Trash2 className="h-2.5 w-2.5" />
                                           {deleting === session.id ? "Removing…" : "Remove"}
@@ -991,7 +1090,7 @@ export default function SocialPage() {
                                         <span className="text-[10px] text-muted-foreground">{session.skill_level}</span>
                                         <span className="text-[10px] text-emerald-700">{fmtDuration(session.duration_minutes ?? 60)}</span>
                                         <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white">
-                                          <Users className="h-2.5 w-2.5" /> Join
+                                          <MessageSquare className="h-2.5 w-2.5" /> Message
                                         </span>
                                       </button>
                                     );
@@ -1093,7 +1192,71 @@ export default function SocialPage() {
         </DialogContent>
       </Dialog>
 
-      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} reason={authReason || undefined} />
+      {/* In-app message dialog */}
+      <Dialog open={msgOpen} onOpenChange={(v) => { if (!v) { setMsgOpen(false); setMsgRequest(null); setMsgSent(false); setMsgText(""); } }}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>{msgIsOwner ? "Messages for your slot" : `Connect with ${msgRequest?.player_name}`}</DialogTitle>
+            {msgRequest && (
+              <DialogDescription>
+                {msgRequest.venue_name} · {msgRequest.date} · {msgRequest.time_slot}
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            {/* Thread */}
+            {msgRequest && (messages[msgRequest.id] ?? []).length > 0 && (
+              <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border bg-muted/30 p-3">
+                {(messages[msgRequest.id] ?? []).map((m) => {
+                  const isMine = m.sender_user_id === user?.id;
+                  return (
+                    <div key={m.id} className={`flex flex-col gap-0.5 ${isMine ? "items-end" : "items-start"}`}>
+                      <span className="text-[10px] text-muted-foreground">{m.sender_name}</span>
+                      <span className={`max-w-[85%] rounded-xl px-3 py-1.5 text-xs leading-snug ${isMine ? "bg-primary text-primary-foreground" : "bg-background border"}`}>
+                        {m.message}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* Empty state for poster waiting for messages */}
+            {msgIsOwner && msgRequest && (messages[msgRequest.id] ?? []).length === 0 && (
+              <p className="rounded-lg border bg-muted/30 p-4 text-center text-xs text-muted-foreground">
+                No messages yet — players who want to join will message you here.
+              </p>
+            )}
+            {/* Compose area — poster can reply; others can send first message */}
+            {msgSent ? (
+              <div className="rounded-lg border bg-emerald-50 p-3 text-center text-xs text-emerald-700">
+                Message sent! {!msgIsOwner && `${msgRequest?.player_name} will be notified.`}
+              </div>
+            ) : (
+              <>
+                {!msgIsOwner && (
+                  <p className="text-xs text-muted-foreground">
+                    Send {msgRequest?.player_name} a message to arrange your game. Your email stays private.
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    value={msgText}
+                    onChange={(e) => setMsgText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
+                    placeholder={msgIsOwner ? "Reply…" : "Hi, I'd love to join you!"}
+                    className="text-sm"
+                  />
+                  <Button size="icon" onClick={handleSendMessage} disabled={!msgText.trim() || msgSending}>
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AuthModal open={authOpen} onClose={() => { setAuthOpen(false); setAuthReturnTo(undefined); }} reason={authReason || undefined} returnTo={authReturnTo} />
     </div>
   );
 }

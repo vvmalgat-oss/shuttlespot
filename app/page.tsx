@@ -169,13 +169,13 @@ export default function Home() {
         <div className="absolute inset-0 bg-black/60" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20" />
         {/* Bottom fade so the section blends into page */}
-        <div className="absolute bottom-0 inset-x-0 h-24 bg-gradient-to-t from-background to-transparent" />
+        <div className="absolute bottom-0 inset-x-0 h-32 bg-gradient-to-t from-background to-transparent" />
 
         {/* Content */}
         <div className="relative z-10 mx-auto w-full max-w-xl text-center">
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-medium text-white backdrop-blur">
             <MapPin className="h-3 w-3" />
-            68+ venues across Australia
+            106+ venues across Australia
           </div>
 
           <h1 className="text-[2.7rem] font-extrabold leading-[1.12] tracking-tight text-white sm:text-5xl lg:text-6xl">

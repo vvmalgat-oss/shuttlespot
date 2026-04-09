@@ -4,6 +4,34 @@ import { GoogleMap, MarkerF, CircleF, useJsApiLoader, Libraries } from "@react-g
 
 // Defined outside component — must match SearchModal.tsx to avoid "LoadScript reloaded" warnings.
 const LIBRARIES: Libraries = ["places"];
+
+// ─── Shuttlecock marker icon ───────────────────────────────────────────────────
+// viewBox 40×46. Five feather shafts radiate from the tip to the top ring,
+// with two horizontal cross-section rings — gives the real shuttlecock silhouette.
+function makeShuttlecockUrl(selected: boolean): string {
+  const fill = selected ? "#1d4ed8" : "#2563eb";
+  const ringFill = selected ? "rgba(219,234,254,0.96)" : "rgba(255,255,255,0.96)";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="46" viewBox="0 0 40 46">
+  <ellipse cx="20" cy="45" rx="5" ry="1.6" fill="rgba(0,0,0,0.15)"/>
+  <line x1="20" y1="40" x2="3"  y2="11" stroke="${fill}" stroke-width="2"   stroke-linecap="round"/>
+  <line x1="20" y1="40" x2="10" y2="6"  stroke="${fill}" stroke-width="1.4" stroke-linecap="round" opacity="0.7"/>
+  <line x1="20" y1="40" x2="20" y2="4"  stroke="${fill}" stroke-width="1.4" stroke-linecap="round" opacity="0.7"/>
+  <line x1="20" y1="40" x2="30" y2="6"  stroke="${fill}" stroke-width="1.4" stroke-linecap="round" opacity="0.7"/>
+  <line x1="20" y1="40" x2="37" y2="11" stroke="${fill}" stroke-width="2"   stroke-linecap="round"/>
+  <ellipse cx="20" cy="22" rx="11" ry="3.5" fill="none" stroke="${fill}" stroke-width="1.4" opacity="0.55"/>
+  <ellipse cx="20" cy="31" rx="6"  ry="2"   fill="none" stroke="${fill}" stroke-width="1.2" opacity="0.4"/>
+  <ellipse cx="20" cy="11" rx="17" ry="5.5" fill="${ringFill}" stroke="${fill}" stroke-width="2.2"/>
+</svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function shuttlecockIcon(selected: boolean): google.maps.Icon {
+  return {
+    url: makeShuttlecockUrl(selected),
+    scaledSize: selected ? new google.maps.Size(42, 48) : new google.maps.Size(34, 39),
+    anchor: selected ? new google.maps.Point(21, 46) : new google.maps.Point(17, 37),
+  };
+}
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { LocateFixed, Loader2 } from "lucide-react";
 
@@ -168,14 +196,7 @@ export default function VenueMap({
               title={venue.name}
               onClick={() => onMarkerClick?.(venue.id)}
               zIndex={isSelected ? 999 : 1}
-              icon={{
-                url: isSelected
-                  ? "https://maps.google.com/mapfiles/ms/icons/blue-dot.png"
-                  : "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
-                scaledSize: isSelected
-                  ? new google.maps.Size(44, 44)
-                  : new google.maps.Size(34, 34),
-              }}
+              icon={shuttlecockIcon(isSelected)}
             />
           );
         })}

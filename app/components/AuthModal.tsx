@@ -8,15 +8,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 
-type Props = { open: boolean; onClose: () => void; reason?: string };
+type Props = { open: boolean; onClose: () => void; reason?: string; returnTo?: string };
 
-export default function AuthModal({ open, onClose, reason }: Props) {
+export default function AuthModal({ open, onClose, reason, returnTo }: Props) {
   const [email, setEmail] = useState("");
   const [emailSent, setEmailSent] = useState(false);
   const [loading, setLoading] = useState<"google" | "facebook" | "email" | null>(null);
   const [error, setError] = useState("");
 
-  const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "";
+  // After auth, send the user back to wherever they came from.
+  // `returnTo` can be overridden by the caller; otherwise we use the current path.
+  const callbackBase = typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "/auth/callback";
+  const nextPath = returnTo ?? (typeof window !== "undefined" ? window.location.pathname + window.location.search : "/");
+  const redirectTo = `${callbackBase}?next=${encodeURIComponent(nextPath)}`;
 
   const signInWithGoogle = async () => {
     setLoading("google");

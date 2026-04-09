@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { timingSafeEqual } from "crypto";
 
-const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY!;
+const MAPS_KEY = process.env.GOOGLE_MAPS_KEY ?? process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY!;
 const CRON_SECRET = process.env.CRON_SECRET!;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -47,36 +48,56 @@ async function fetchRating(placeId: string): Promise<{ rating: number | null; re
   };
 }
 
+/** Timing-safe string comparison to prevent timing attacks on the secret. */
+function safeCompare(a: string, b: string): boolean {
+  try {
+    const aBytes = Buffer.from(a, "utf8");
+    const bBytes = Buffer.from(b, "utf8");
+    // Must be the same length for timingSafeEqual; pad to avoid length leak
+    if (aBytes.length !== bBytes.length) return false;
+    return timingSafeEqual(aBytes, bBytes);
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(req: NextRequest) {
   // Auth: Vercel cron sends Authorization: Bearer <CRON_SECRET>
-  // Manual calls can pass ?secret=... or x-cron-secret header
+  // Only accept the Bearer header — never accept secrets in query strings
+  // (they appear in server logs and browser history).
   const authHeader = req.headers.get("authorization");
-  const secret =
-    (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null) ??
-    req.headers.get("x-cron-secret") ??
-    req.nextUrl.searchParams.get("secret");
+  const secret = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
-  if (!CRON_SECRET || secret !== CRON_SECRET) {
+  if (!CRON_SECRET || !secret || !safeCompare(secret, CRON_SECRET)) {
+    console.warn(`[refresh-ratings] Unauthorized attempt from ${req.headers.get("x-forwarded-for") ?? "unknown"}`);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  console.log("[refresh-ratings] Starting ratings refresh");
   const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  // Fetch all venues
   const { data: venues, error } = await sb
     .from("venues")
     .select("id, name, address, suburb, state, place_id")
     .order("id");
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[refresh-ratings] Failed to fetch venues:", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
-  const results: { id: number; name: string; place_id?: string; rating?: number | null; review_count?: number | null; status: string }[] = [];
+  const results: {
+    id: number;
+    name: string;
+    place_id?: string;
+    rating?: number | null;
+    review_count?: number | null;
+    status: string;
+  }[] = [];
 
-  // Rate limit: Places API allows ~10 QPS; we add a small delay between calls
-  for (const venue of (venues as Venue[])) {
+  for (const venue of venues as Venue[]) {
     let placeId = venue.place_id;
 
-    // Step 1: resolve place_id if missing
     if (!placeId) {
       placeId = await lookupPlaceId(venue);
       if (!placeId) {
@@ -86,10 +107,8 @@ export async function GET(req: NextRequest) {
       await sb.from("venues").update({ place_id: placeId }).eq("id", venue.id);
     }
 
-    // Step 2: fetch latest rating
     const { rating, review_count } = await fetchRating(placeId);
 
-    // Step 3: update DB
     await sb.from("venues").update({
       place_id: placeId,
       google_rating: rating,
@@ -98,12 +117,13 @@ export async function GET(req: NextRequest) {
 
     results.push({ id: venue.id, name: venue.name, place_id: placeId, rating, review_count, status: "ok" });
 
-    // Avoid hitting rate limits (100ms between calls)
+    // Avoid hitting Google Places rate limits (100ms between calls)
     await new Promise((r) => setTimeout(r, 100));
   }
 
   const updated = results.filter((r) => r.status === "ok").length;
   const notFound = results.filter((r) => r.status === "not_found").length;
+  console.log(`[refresh-ratings] Done: updated=${updated} not_found=${notFound}`);
 
   return NextResponse.json({ updated, not_found: notFound, results });
 }
