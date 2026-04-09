@@ -2,22 +2,9 @@ import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
 
+// next/og bundles Inter automatically — no external font fetch needed.
+// fontWeight 700 matches the site's font-bold wordmark exactly.
 export async function GET() {
-  let fonts: ConstructorParameters<typeof ImageResponse>[1]["fonts"] = [];
-
-  try {
-    const fontRes = await fetch(
-      "https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuFuYAZJh.woff2",
-      { signal: AbortSignal.timeout(3000) }
-    );
-    if (fontRes.ok) {
-      const fontData = await fontRes.arrayBuffer();
-      fonts = [{ name: "Inter", data: fontData, weight: 800, style: "normal" }];
-    }
-  } catch {
-    // fall back to default font
-  }
-
   return new ImageResponse(
     (
       <div
@@ -46,15 +33,15 @@ export async function GET() {
           </svg>
         </div>
         <div style={{ display: "flex" }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-1px", fontFamily: fonts.length ? "Inter" : "sans-serif" }}>
+          <span style={{ fontSize: 22, fontWeight: 700, color: "#0f172a", letterSpacing: "-1px" }}>
             Shuttle
           </span>
-          <span style={{ fontSize: 22, fontWeight: 800, color: "#2563eb", letterSpacing: "-1px", fontFamily: fonts.length ? "Inter" : "sans-serif" }}>
+          <span style={{ fontSize: 22, fontWeight: 700, color: "#2563eb", letterSpacing: "-1px" }}>
             Spot
           </span>
         </div>
       </div>
     ),
-    { width: 160, height: 44, fonts }
+    { width: 160, height: 44 }
   );
 }
